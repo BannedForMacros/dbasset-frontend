@@ -30,7 +30,7 @@ export default function Sidebar() {
   const menuItems = [
     { name: 'Dashboard', path: '/dashboard', icon: MdDashboard },
     // 2. Ajustamos las rutas para que coincidan con la carpeta /dashboard
-    { name: 'Locales', path: '/dashboard/local', icon: MdBusiness },
+    { name: 'Locales', path: '/dashboard/locales', icon: MdBusiness },
     { name: 'Áreas', path: '/dashboard/areas', icon: MdLayers }, // 3. Nueva opción
     { name: 'Oficinas', path: '/dashboard/oficinas', icon: MdMeetingRoom }, // <--- NUEVO
     { name: 'Responsables', path: '/dashboard/responsables', icon: MdPeople }, // <--- NUEVO
