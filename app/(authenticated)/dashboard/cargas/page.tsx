@@ -6,7 +6,7 @@ import { usuarioService, Usuario } from '../../../services/usuario.service';
 import { 
   MdAdd, 
   MdAssignmentInd, 
-  MdCloudUpload, // Nuevo ícono
+  MdCloudUpload,
   MdInsertDriveFile,
   MdCheckCircle
 } from 'react-icons/md';
@@ -19,7 +19,7 @@ export default function CargasPage() {
   // Modales
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [showUploadModal, setShowUploadModal] = useState(false); // <--- NUEVO MODAL
+  const [showUploadModal, setShowUploadModal] = useState(false);
   
   // Estados de formularios
   const [descripcion, setDescripcion] = useState('');
@@ -59,7 +59,6 @@ export default function CargasPage() {
     }
   };
 
-  // --- LÓGICA DE SUBIDA DE ARCHIVO ---
   const openUploadModal = (carga: Carga) => {
     setSelectedCarga(carga);
     setSelectedFile(null);
@@ -77,12 +76,11 @@ export default function CargasPage() {
 
     setUploading(true);
     try {
-      // Aquí llamamos al servicio (cuando el backend esté listo)
       await cargaService.subirArchivo(selectedCarga.codCarga, selectedFile);
       
       alert('¡Archivo procesado exitosamente!');
       setShowUploadModal(false);
-      cargarDatos(); // Recargar para actualizar contadores si los hubiera
+      cargarDatos();
     } catch (error) {
       console.error(error);
       alert('Error al subir el archivo. Verifique el formato.');
@@ -90,7 +88,6 @@ export default function CargasPage() {
       setUploading(false);
     }
   };
-  // -----------------------------------
 
   const openAssignModal = async (carga: Carga) => {
     try {
@@ -160,10 +157,7 @@ export default function CargasPage() {
               </p>
             </div>
 
-            {/* BOTONERA DE ACCIONES */}
             <div className="border-t pt-4 flex flex-col gap-2">
-              
-              {/* Botón Importar (Solo si está Creada 'C') */}
               {carga.estado === 'C' && (
                 <button 
                   onClick={() => openUploadModal(carga)}
@@ -173,7 +167,6 @@ export default function CargasPage() {
                 </button>
               )}
 
-              {/* Botón Asignar (Si no está terminada) */}
               {carga.estado !== 'T' && (
                 <button 
                   onClick={() => openAssignModal(carga)}
@@ -193,7 +186,7 @@ export default function CargasPage() {
         ))}
       </div>
 
-      {/* MODAL CREAR (Igual que antes) */}
+      {/* MODAL CREAR */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -218,7 +211,7 @@ export default function CargasPage() {
         </div>
       )}
 
-      {/* MODAL SUBIR ARCHIVO (NUEVO) */}
+      {/* MODAL SUBIR ARCHIVO */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -232,10 +225,9 @@ export default function CargasPage() {
             <div className="p-8 space-y-6">
               <p className="text-sm text-gray-600">
                 Seleccione el archivo <strong>Excel (.xlsx)</strong> o <strong>XML</strong> para poblar la carga: 
-                <span className="font-semibold block text-gray-800 mt-1">"{selectedCarga?.descripcion}"</span>
+                <span className="font-semibold block text-gray-800 mt-1">{selectedCarga?.descripcion}</span>
               </p>
 
-              {/* Zona de "Drop" simulada con el input */}
               <div 
                 className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-emerald-500 hover:bg-emerald-50 transition cursor-pointer group"
                 onClick={() => fileInputRef.current?.click()}
@@ -263,7 +255,6 @@ export default function CargasPage() {
                 )}
               </div>
 
-              {/* Barra de Progreso Simulada (o real si el backend soportara streaming) */}
               {uploading && (
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs font-medium text-gray-600">
@@ -297,7 +288,7 @@ export default function CargasPage() {
         </div>
       )}
 
-      {/* MODAL ASIGNAR (Igual que antes) */}
+      {/* MODAL ASIGNAR */}
       {showAssignModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
