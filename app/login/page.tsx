@@ -17,27 +17,25 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
+const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      // 1. Llamamos al login.
-      // El servicio internamente YA GUARDA el usuario y el authHeader.
-      await authService.login({ username, password });
+      // El servicio hace todo: login, encriptar pass y guardar en storage.
+      const response = await authService.login({ username, password });
       
-      // ❌ BORRAMOS ESTA LÍNEA: authService.saveUserData(response);
-      // Ya no es necesaria y es la que causaba el error.
-      
-      // 2. Redirigir al dashboard
-      // Usamos replace para que no puedan volver atrás al login
-      router.replace('/dashboard'); 
+      // Decidir a dónde ir
+      if (response.currentCompanyId) {
+         router.replace('/dashboard');
+      } else {
+         router.replace('/select-company');
+      }
 
     } catch (err) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      // Si es error 401 manual o error de red
-      const errorMessage = axiosError.response?.data?.error || 'Credenciales incorrectas o error de conexión';
+      const errorMessage = axiosError.response?.data?.error || 'Error de conexión';
       setError(errorMessage);
     } finally {
       setLoading(false);

@@ -1,58 +1,63 @@
-// src/services/local.service.ts
+import api from './api';
+import { authService } from './auth.service';
 
-import api from './api'; // <--- ESTO ES LO VITAL (Tu archivo api.ts)
+const RESOURCE = '/locales';
 
-// Definimos el tipo aquí mismo como pediste
 export interface Local {
-  codLocal?: number; 
+  codLocal?: number;
   nombreLocal: string;
   direccion: string;
   codInterno: string;
+  codEmpresa?: number;
   activo?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
-const RESOURCE = '/locales'; 
+// ✅ Helper para obtener el codEmpresa actual
+const getCodEmpresa = (): number => {
+  const user = authService.getUserData();
+  if (!user || !user.currentCompanyId) {
+    throw new Error('No hay empresa seleccionada');
+  }
+  return user.currentCompanyId;
+};
 
 export const localService = {
-  // 1. Listar solo activos (Para la tabla principal)
+  // ✅ Ahora envía codEmpresa como parámetro
   listarActivos: async (): Promise<Local[]> => {
-    try {
-      // Usamos 'api' (que ya tiene el token) en vez de 'axios'
-      const response = await api.get<Local[]>(RESOURCE);
-      return response.data;
-    } catch (error) {
-      console.error('Error al listar locales activos:', error);
-      throw error; // Lanzamos el error para que la UI sepa que falló
-    }
-  },
-
-  // 2. Listar todos (Histórico)
-  listarTodos: async (): Promise<Local[]> => {
-    const response = await api.get<Local[]>(`${RESOURCE}/all`);
+    const codEmpresa = getCodEmpresa();
+    const response = await api.get<Local[]>(`${RESOURCE}/activos`, {
+      params: { codEmpresa }
+    });
     return response.data;
   },
 
-  // 3. Obtener uno por ID
+  listarTodos: async (): Promise<Local[]> => {
+    const codEmpresa = getCodEmpresa();
+    const response = await api.get<Local[]>(`${RESOURCE}`, {
+      params: { codEmpresa }
+    });
+    return response.data;
+  },
+
   obtenerPorId: async (id: number): Promise<Local> => {
     const response = await api.get<Local>(`${RESOURCE}/${id}`);
     return response.data;
   },
 
-  // 4. Crear
+  // ✅ Envía codEmpresa en el body o como parámetro según tu backend
   crear: async (local: Local): Promise<Local> => {
-    const response = await api.post<Local>(RESOURCE, local);
+    const codEmpresa = getCodEmpresa();
+    const response = await api.post<Local>(`${RESOURCE}`, local, {
+      params: { codEmpresa } // o incluirlo en el body si prefieres
+    });
     return response.data;
   },
 
-  // 5. Actualizar
   actualizar: async (id: number, local: Local): Promise<Local> => {
     const response = await api.put<Local>(`${RESOURCE}/${id}`, local);
     return response.data;
   },
 
-  // 6. Eliminar
   eliminar: async (id: number): Promise<void> => {
     await api.delete(`${RESOURCE}/${id}`);
   },

@@ -1,9 +1,15 @@
 import api from './api';
 
-// URL base relativa (api.ts ya tiene el host)
 const RESOURCE = '/auth';
 
-// --- TIPOS (Restauramos UserData para que no falle tu Dashboard) ---
+// --- TIPOS ---
+
+export interface Empresa {
+  codEmpresa: number;
+  ruc: string;
+  razonSocial: string;
+  rol: string;
+}
 
 export interface LoginRequest {
   username: string;
@@ -15,44 +21,56 @@ export interface LoginResponse {
   usuario: string;
   nombreCompleto: string;
   tipoUsu: number;
+  empresas: Empresa[];
   authHeader?: string; 
+  currentCompanyId?: number;
 }
 
-// Re-exportamos UserData para compatibilidad con tu código anterior
-export interface UserData {
-  usuario: string;
-  nombreCompleto: string;
-  tipoUsu: number;
-}
+export type UserData = LoginResponse;
 
 export const authService = {
   login: async (credentials: LoginRequest): Promise<LoginResponse> => {
     const response = await api.post<LoginResponse>(`${RESOURCE}/login`, credentials);
     
     if (response.data) {
-      // Generar credencial Basic Auth
+      // 1. Generar credencial Basic Auth
       const tokenBase64 = btoa(`${credentials.username}:${credentials.password}`);
       const authHeader = `Basic ${tokenBase64}`;
 
-      const sessionData = {
+      // 2. ⚠️ IMPORTANTE: Ya NO seleccionamos empresa automáticamente
+      // Siempre dejamos currentCompanyId como undefined para forzar el selector
+
+      // 3. Construir el objeto de sesión
+      const sessionData: LoginResponse = {
         ...response.data,
-        authHeader: authHeader
+        authHeader: authHeader,
+        currentCompanyId: undefined // Siempre undefined al inicio
       };
 
+      // 4. Guardar en Storage
       authService.saveSession(sessionData);
+      return sessionData;
     }
     
     return response.data;
   },
 
-  // CORRECCIÓN 1: Quitamos 'any' y usamos el tipo correcto
+  // Método para cambiar de empresa manualmente
+  selectCompany: (codEmpresa: number): void => {
+    const data = authService.getUserData();
+    if (data) {
+      data.currentCompanyId = codEmpresa;
+      authService.saveSession(data);
+    }
+  },
+
   saveSession: (data: LoginResponse): void => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('dbasset_user', JSON.stringify(data));
     }
   },
 
-  // CORRECCIÓN 2: Agregamos este método que tu Login.tsx estaba buscando
+  // Método de compatibilidad (alias)
   saveUserData: (data: LoginResponse): void => {
     authService.saveSession(data);
   },
@@ -61,15 +79,27 @@ export const authService = {
     if (typeof window !== 'undefined') {
       const userStr = localStorage.getItem('dbasset_user');
       if (userStr) {
-        return JSON.parse(userStr);
+        return JSON.parse(userStr) as LoginResponse;
       }
     }
     return null;
   },
 
-  isAuthenticated: (): boolean => {
+  // ✅ NUEVO: Verifica si está logueado (sin importar empresa)
+  isLoggedIn: (): boolean => {
     const user = authService.getUserData();
-    return !!user && !!user.authHeader;
+    return !!(user && user.authHeader);
+  },
+
+  // ✅ Verifica si tiene empresa seleccionada
+  hasCompanySelected: (): boolean => {
+    const user = authService.getUserData();
+    return !!(user && user.currentCompanyId);
+  },
+
+  // ✅ MODIFICADO: Ahora valida usuario + empresa
+  isAuthenticated: (): boolean => {
+    return authService.isLoggedIn() && authService.hasCompanySelected();
   },
 
   logout: (): void => {
