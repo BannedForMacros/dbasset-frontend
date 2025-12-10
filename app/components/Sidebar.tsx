@@ -5,13 +5,15 @@ import { authService } from '../services/auth.service';
 import { useState } from 'react';
 import { 
   MdDashboard, MdLogout, MdMenu, MdClose,
-  MdPeople, MdInfo, MdQrCode, MdLocalShipping, MdSettings, MdSwapHoriz
+  MdPeople, MdInfo, MdQrCode, MdLocalShipping, MdSettings, MdSwapHoriz,
+  MdExpandMore, MdExpandLess, MdBuild, MdColorLens, MdBrandingWatermark
 } from 'react-icons/md';
 
 export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(true);
+  const [mantenedorOpen, setMantenedorOpen] = useState(false);
   
   const companyInfo = (() => {
     if (typeof window === 'undefined') {
@@ -41,12 +43,20 @@ export default function Sidebar() {
 
   const menuItems = [
     { name: 'Dashboard', path: '/dashboard', icon: MdDashboard },
-    { name: 'Configuración', path: '/dashboard/config-organizacional', icon: MdSettings }, // ✅ Nuevo menú consolidado
-    { name: 'Responsables', path: '/dashboard/responsables', icon: MdPeople },
-    { name: 'Estados', path: '/dashboard/estados', icon: MdInfo },
     { name: 'Activos', path: '/dashboard/activos', icon: MdQrCode },
     { name: 'Cargas', path: '/dashboard/cargas', icon: MdLocalShipping },
+    { name: 'Configuración', path: '/dashboard/config-organizacional', icon: MdSettings },
+    { name: 'Responsables', path: '/dashboard/responsables', icon: MdPeople },
   ];
+
+  const mantenedorItems = [
+    { name: 'Colores', path: '/dashboard/colores', icon: MdColorLens },
+    { name: 'Marcas', path: '/dashboard/marcas', icon: MdBrandingWatermark },
+    { name: 'Estados', path: '/dashboard/estados', icon: MdInfo },
+  ];
+
+  // Verificar si alguna ruta de mantenedor está activa
+  const isMantenedorActive = mantenedorItems.some(item => pathname === item.path);
 
   return (
     <>
@@ -80,6 +90,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700">
+          {/* Menú principal */}
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.path;
@@ -96,6 +107,46 @@ export default function Sidebar() {
               </button>
             );
           })}
+
+          {/* Menú desplegable de Mantenedor */}
+          <div>
+            <button
+              onClick={() => setMantenedorOpen(!mantenedorOpen)}
+              className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                isMantenedorActive ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <MdBuild size={22} />
+                <span className="font-medium text-sm">Mantenedor</span>
+              </div>
+              {mantenedorOpen ? <MdExpandLess size={20} /> : <MdExpandMore size={20} />}
+            </button>
+
+            {/* Submenú */}
+            <div className={`overflow-hidden transition-all duration-300 ${mantenedorOpen ? 'max-h-48' : 'max-h-0'}`}>
+              <div className="ml-4 mt-2 space-y-1 border-l-2 border-gray-800 pl-4">
+                {mantenedorItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.path;
+                  return (
+                    <button
+                      key={item.path}
+                      onClick={() => router.push(item.path)}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-sm ${
+                        isActive 
+                          ? 'bg-blue-500/20 text-blue-400 font-medium' 
+                          : 'text-gray-500 hover:bg-gray-800 hover:text-gray-300'
+                      }`}
+                    >
+                      <Icon size={18} />
+                      <span>{item.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </nav>
 
         <div className="p-4 border-t border-gray-800 bg-gray-900 space-y-2">

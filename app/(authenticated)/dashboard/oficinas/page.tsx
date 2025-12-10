@@ -108,7 +108,7 @@ export default function OficinasPage() {
           <p className="text-gray-500">Gestión de oficinas por área</p>
         </div>
         <button onClick={openNewModal} className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 transition shadow-md font-medium">
-          <MdAdd size={20} /> Nueva Oficina
+          <MdAdd size={20} /> Nueva Oficinaaaaaa
         </button>
       </div>
 

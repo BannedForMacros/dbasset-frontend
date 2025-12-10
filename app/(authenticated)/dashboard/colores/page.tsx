@@ -1,19 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { estadoService, Estado } from '../../../services/estado.service';
+import { colorService, Color } from '../../../services/color.service';
 import { MdAdd, MdEdit, MdDelete } from 'react-icons/md';
 import { DataTable } from '../../../components/common/DataTable';
 import { useTableSearch } from '../../../hooks/useTableSearch';
 
-export default function EstadosPage() {
-  const [estados, setEstados] = useState<Estado[]>([]);
+export default function ColoresPage() {
+  const [colores, setColores] = useState<Color[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [nombreEstado, setNombreEstado] = useState('');
+  const [nombreColor, setNombreColor] = useState('');
 
-  const { searchTerm, setSearchTerm, filteredData } = useTableSearch(estados);
+  const { searchTerm, setSearchTerm, filteredData } = useTableSearch(colores);
 
   useEffect(() => {
     cargarDatos();
@@ -22,8 +22,8 @@ export default function EstadosPage() {
   const cargarDatos = async () => {
     try {
       setLoading(true);
-      const data = await estadoService.listarTodos();
-      setEstados(data);
+      const data = await colorService.listarTodos();
+      setColores(data);
     } catch (error) {
       console.error(error);
     } finally {
@@ -34,42 +34,42 @@ export default function EstadosPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload = { nombreEstado };
+      const payload = { nombreColor };
       
       if (editingId) {
-        await estadoService.actualizar(editingId, payload);
+        await colorService.actualizar(editingId, payload);
       } else {
-        await estadoService.crear(payload);
+        await colorService.crear(payload);
       }
       closeModal();
       cargarDatos();
     } catch (error) {
       console.error(error);
-      alert('Error al guardar el estado');
+      alert('Error al guardar el color');
     }
   };
 
-  const handleEdit = (estado: Estado) => {
-    setEditingId(estado.codEstado || null);
-    setNombreEstado(estado.nombreEstado);
+  const handleEdit = (color: Color) => {
+    setEditingId(color.codColor || null);
+    setNombreColor(color.nombreColor);
     setShowModal(true);
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('¿Está seguro de eliminar este estado?')) {
+    if (confirm('¿Está seguro de eliminar este color?')) {
       try {
-        await estadoService.eliminar(id);
+        await colorService.eliminar(id);
         cargarDatos();
       } catch (error) {
         console.error(error);
-        alert('Error al eliminar el estado');
+        alert('Error al eliminar el color');
       }
     }
   };
 
   const openNewModal = () => {
     setEditingId(null);
-    setNombreEstado('');
+    setNombreColor('');
     setShowModal(true);
   };
 
@@ -80,14 +80,14 @@ export default function EstadosPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Estados de Activo</h1>
-          <p className="text-gray-600 mt-1">Gestión de estados del sistema</p>
+          <h1 className="text-3xl font-bold text-gray-800">Colores</h1>
+          <p className="text-gray-600 mt-1">Gestión de colores de productos</p>
         </div>
         <button 
           onClick={openNewModal} 
           className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition shadow-lg font-medium"
         >
-          <MdAdd size={22} /> Nuevo Estado
+          <MdAdd size={22} /> Nuevo Color
         </button>
       </div>
 
@@ -95,25 +95,25 @@ export default function EstadosPage() {
       <DataTable
         data={filteredData}
         columns={[
-          { header: 'Estado' },
+          { header: 'Color' },
           { header: 'Acciones', className: 'text-right w-32' }
         ]}
-        renderRow={(estado: Estado, index: number) => (
-          <tr key={estado.codEstado || index} className="hover:bg-gray-50 transition">
+        renderRow={(color: Color, index: number) => (
+          <tr key={color.codColor || index} className="hover:bg-gray-50 transition">
             <td className="px-6 py-4">
-              <span className="font-semibold text-gray-900">{estado.nombreEstado}</span>
+              <span className="font-semibold text-gray-900">{color.nombreColor}</span>
             </td>
             <td className="px-6 py-4 text-right">
               <div className="flex justify-end gap-2">
                 <button 
-                  onClick={() => handleEdit(estado)} 
+                  onClick={() => handleEdit(color)} 
                   className="p-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition"
                   title="Editar"
                 >
                   <MdEdit size={20} />
                 </button>
                 <button 
-                  onClick={() => estado.codEstado && handleDelete(estado.codEstado)} 
+                  onClick={() => color.codColor && handleDelete(color.codColor)} 
                   className="p-2 border-2 border-red-600 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition"
                   title="Eliminar"
                 >
@@ -134,7 +134,7 @@ export default function EstadosPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5 flex justify-between items-center">
               <h3 className="font-bold text-xl text-white">
-                {editingId ? 'Editar Estado' : 'Nuevo Estado'}
+                {editingId ? 'Editar Color' : 'Nuevo Color'}
               </h3>
               <button 
                 onClick={closeModal} 
@@ -147,15 +147,15 @@ export default function EstadosPage() {
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Nombre del Estado <span className="text-red-500">*</span>
+                  Nombre del Color <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  value={nombreEstado}
-                  onChange={(e) => setNombreEstado(e.target.value)}
+                  value={nombreColor}
+                  onChange={(e) => setNombreColor(e.target.value)}
                   required
                   autoFocus
-                  placeholder="Ingrese el nombre del estado"
+                  placeholder="Ej: Negro, Blanco, Rojo..."
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                 />
               </div>
