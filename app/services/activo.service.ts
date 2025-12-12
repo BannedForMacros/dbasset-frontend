@@ -57,5 +57,11 @@ export const activoService = {
 
   eliminar: async (id: number): Promise<void> => {
     await api.delete(`${RESOURCE}/${id}`);
-  }
+  },
+
+  //AHORA (con axios como los demás métodos)
+  listarPorCarga: async (codCarga: number): Promise<Activo[]> => {
+    const response = await api.get<Activo[]>(`${RESOURCE}/carga/${codCarga}`);
+    return response.data;
+  },
 };

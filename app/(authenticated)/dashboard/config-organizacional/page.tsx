@@ -595,13 +595,18 @@ export default function ConfigOrganizacionalPage() {
                     <div className="flex items-center px-6 py-4 gap-3">
                       <button
                         onClick={() => toggleLocal(local.codLocal!)}
-                        className={`p-1 rounded hover:bg-gray-200 transition ${!hasAreas && 'invisible'}`}
+                        className={`p-2 rounded-lg border transition-all duration-200 transform hover:scale-105 ${
+                          hasAreas 
+                            ? 'border-blue-300 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 text-blue-600 cursor-pointer' 
+                            : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
                         disabled={!hasAreas}
+                        title={hasAreas ? "Click para expandir/contraer áreas" : "No tiene áreas para mostrar"}
                       >
                         {isExpanded ? (
-                          <MdExpandMore size={20} className="text-gray-600" />
+                          <MdExpandMore size={22} className="transition-transform duration-200" />
                         ) : (
-                          <MdChevronRight size={20} className="text-gray-600" />
+                          <MdChevronRight size={22} className="transition-transform duration-200" />
                         )}
                       </button>
 
@@ -670,13 +675,18 @@ export default function ConfigOrganizacionalPage() {
                               <div className="flex items-center px-6 py-3 gap-3">
                                 <button
                                   onClick={() => toggleArea(area.codArea!)}
-                                  className={`p-1 rounded hover:bg-gray-200 transition ${!hasOficinas && 'invisible'}`}
+                                  className={`p-1.5 rounded-lg border transition-all duration-200 transform hover:scale-105 ${
+                                    hasOficinas 
+                                      ? 'border-purple-300 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 text-purple-600 cursor-pointer' 
+                                      : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                                  }`}
                                   disabled={!hasOficinas}
+                                  title={hasOficinas ? "Click para expandir/contraer oficinas" : "No tiene oficinas para mostrar"}
                                 >
                                   {isAreaExpanded ? (
-                                    <MdExpandMore size={18} className="text-gray-600" />
+                                    <MdExpandMore size={20} className="transition-transform duration-200" />
                                   ) : (
-                                    <MdChevronRight size={18} className="text-gray-600" />
+                                    <MdChevronRight size={20} className="transition-transform duration-200" />
                                   )}
                                 </button>
 

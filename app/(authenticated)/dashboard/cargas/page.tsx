@@ -1,5 +1,5 @@
 'use client';
-
+import React, { ReactElement } from 'react';
 import { useEffect, useState, useRef } from 'react';
 import { cargaService, Carga, RangoDistribucion } from '../../../services/carga.service'; 
 import { responsableService, Responsable } from '../../../services/responsable.service';
@@ -43,6 +43,30 @@ const agruparNumeros = (numeros: number[]): string => {
   grupos.push(inicio === fin ? `${inicio}` : `${inicio}-${fin}`);
   
   return grupos.join(', ');
+};
+const mostrarListaInteligente = (numeros: number[], maxMostrar: number = 5): ReactElement => {
+  if (numeros.length === 0) return <></>;
+  
+  if (numeros.length <= maxMostrar) {
+    return <span>{agruparNumeros(numeros)}</span>;
+  }
+  
+  const primeros = numeros.slice(0, maxMostrar);
+  const restantes = numeros.slice(maxMostrar);
+  
+  return (
+    <div className="space-y-2">
+      <div className="text-sm">
+        {agruparNumeros(primeros)}
+      </div>
+      <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded border border-gray-200">
+        <span className="font-bold">+{restantes.length} más:</span>
+        <div className="mt-1 max-h-20 overflow-y-auto">
+          {agruparNumeros(restantes)}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 type ExcelRow = Record<string, string | number | boolean | null | undefined>;
@@ -1422,6 +1446,101 @@ return (
                       </table>
                     </div>
                   </div>
+
+                  {/* Validación de ítems sin asignar - AGREGAR DESPUÉS DE LA TABLA DE DISTRIBUCIÓN */}
+                  {(() => {
+                    // Calcular ítems sin asignar
+                    const assignedRows = new Set<number>();
+                    distribuciones.forEach(dist => {
+                      for (let i = dist.inicio; i <= dist.fin; i++) {
+                        assignedRows.add(i);
+                      }
+                    });
+
+                    const unassignedItems: number[] = [];
+                    for (let i = 1; i <= excelData.length; i++) {
+                      if (!assignedRows.has(i)) {
+                        unassignedItems.push(i);
+                      }
+                    }
+
+                    return unassignedItems.length > 0 ? (
+                      <div className="border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl overflow-hidden shadow-lg">
+                        <div className="bg-amber-100 px-4 py-3 border-b border-amber-300 flex items-center gap-3">
+                          <MdWarning className="text-amber-600 shrink-0" size={24} />
+                          <div>
+                            <h4 className="font-bold text-amber-800">¡Atención! Hay ítems sin asignar</h4>
+                            <p className="text-sm text-amber-700">Hay {unassignedItems.length} ítems sin responsable asignado.</p>
+                          </div>
+                        </div>
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-start gap-3">
+                            <div className="shrink-0">
+                              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                                <span className="text-amber-600 font-bold text-sm">
+                                  {unassignedItems.length}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-800">
+                                ¿Está seguro que desea registrar la carga? Hay {unassignedItems.length} ítems sin responsable asignado.
+                              </p>
+                              
+                              <div className="mt-3 p-3 bg-white border border-amber-200 rounded-lg">
+                                <div className="flex justify-between items-center mb-2">
+                                  <p className="text-sm font-bold text-gray-700">
+                                    Ítems sin asignar ({unassignedItems.length} total)
+                                  </p>
+                                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
+                                    {Math.min(unassignedItems.length, 5)} mostrados
+                                  </span>
+                                </div>
+                                
+                                <div className="space-y-1">
+                                  {unassignedItems.slice(0, 5).map((item, idx) => (
+                                    <div key={idx} className="flex items-center gap-2 text-sm">
+                                      <span className="w-5 h-5 flex items-center justify-center bg-amber-100 text-amber-700 rounded text-xs font-bold">
+                                        {idx + 1}
+                                      </span>
+                                      <span className="font-mono text-gray-700">Fila #{item}</span>
+                                    </div>
+                                  ))}
+                                  
+                                  {unassignedItems.length > 5 && (
+                                    <div className="mt-2 pt-2 border-t border-gray-100">
+                                      <div className="text-xs text-gray-600 font-medium mb-1">
+                                        +{unassignedItems.length - 5} ítems adicionales
+                                      </div>
+                                      <div className="max-h-32 overflow-y-auto bg-gray-50 p-2 rounded text-xs">
+                                        {agruparNumeros(unassignedItems.slice(5))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="mt-3 text-sm text-amber-700 flex items-center gap-2">
+                                <MdInfo size={16} />
+                                <p>
+                                  <strong>Recomendación:</strong> Regrese al paso 4 para asignar estos ítems o continúe si desea registrarlos como pendientes.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 flex items-start gap-3">
+                        <MdCheckCircle className="text-green-600 shrink-0 mt-0.5" size={24} />
+                        <div className="text-sm text-green-800">
+                          <p className="font-bold mb-1">✓ Todos los ítems están asignados</p>
+                          <p>¡Perfecto! Todos los {excelData.length} ítems tienen un responsable asignado.</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {/* FIN DE LA VALIDACIÓN */}
 
                   <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 flex items-start gap-3">
                     <MdWarning className="text-amber-600 shrink-0 mt-0.5" size={24} />
