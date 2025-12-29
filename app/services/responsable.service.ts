@@ -9,8 +9,11 @@ export interface Responsable {
   cargo: string;
   codInterno: string;
   activo?: boolean;
-  // Relación: Al enviar (POST) basta con { codOficina: X }
-  oficina: Oficina | { codOficina: number }; 
+  
+  // ✅ CAMBIO CRÍTICO: 
+  // Ahora es un ARRAY 'oficinas' en lugar de un objeto único 'oficina'.
+  // Acepta objetos completos (al leer) o parciales (al enviar: [{ codOficina: 1 }])
+  oficinas: (Oficina | { codOficina: number })[]; 
 }
 
 export const responsableService = {
@@ -33,6 +36,7 @@ export const responsableService = {
     await api.delete(`${RESOURCE}/${id}`);
   },
 
+  // Este método sigue siendo útil para filtrar desde el backend
   listarPorOficina: async (codOficina: number): Promise<Responsable[]> => {
     const response = await api.get<Responsable[]>(`${RESOURCE}/por-oficina/${codOficina}`);
     return response.data;

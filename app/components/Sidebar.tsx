@@ -6,7 +6,8 @@ import { useState } from 'react';
 import { 
   MdDashboard, MdLogout, MdMenu, MdClose,
   MdPeople, MdInfo, MdQrCode, MdLocalShipping, MdSettings, MdSwapHoriz,
-  MdExpandMore, MdExpandLess, MdBuild, MdColorLens, MdBrandingWatermark
+  MdExpandMore, MdExpandLess, MdBuild, MdColorLens, MdBrandingWatermark,
+  MdAssignmentInd // ✅ NUEVO ICONO para Inventariadores
 } from 'react-icons/md';
 
 export default function Sidebar() {
@@ -46,7 +47,8 @@ export default function Sidebar() {
     { name: 'Activos', path: '/dashboard/activos', icon: MdQrCode },
     { name: 'Cargas', path: '/dashboard/cargas', icon: MdLocalShipping },
     { name: 'Configuración', path: '/dashboard/config-organizacional', icon: MdSettings },
-    { name: 'Responsables', path: '/dashboard/responsables', icon: MdPeople },
+    { name: 'Custodios', path: '/dashboard/responsables', icon: MdPeople },
+    { name: 'Inventariadores', path: '/dashboard/inventariador', icon: MdAssignmentInd }, // ✅ NUEVO
   ];
 
   const mantenedorItems = [

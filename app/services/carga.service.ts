@@ -1,13 +1,12 @@
 import api from './api';
-// Asegúrate de que este archivo y la exportación existan
-import { CampoConfig } from './configuracion.service'; 
+import { CampoConfig } from './configuracion.service';
 
 const RESOURCE = '/cargas';
 
 export interface Carga {
   codCarga?: number;
   descripcion: string;
-  estado?: string; 
+  estado?: string;
   fecha?: string;
   activo?: boolean;
   codEmpresa?: number;
@@ -19,12 +18,47 @@ export interface CargaMasivaResponse {
   errores?: string[];
 }
 
-// ✅ INTERFAZ ACTUALIZADA PARA LA DISTRIBUCIÓN
-// Ahora apunta a 'codResponsable' (tabla Responsable) en lugar de 'codUsuario'
 export interface RangoDistribucion {
   inicio: number;
   fin: number;
-  codResponsable: number; // <--- CAMBIO AQUÍ
+  codResponsable?: number;
+  codInventariador?: number;
+}
+
+export interface UbicacionUnica {
+  codLocalUnico: number;
+  codAreaUnica: number;
+  codOficinaUnica: number;
+}
+
+// ✅ NUEVA INTERFAZ: Para el detalle de carga
+export interface DetalleCarga {
+  idDetalle: number;
+  codCarga: number;
+  codActivo: string;
+  inventariado: string;
+  codEstado: number;
+  activo?: {
+    id: number;
+    codActivo: string;
+    descripcion?: string;
+    marca?: string;
+    modelo?: string;
+    serie?: string;
+    // Agrega más campos según necesites
+  };
+  usuario?: {
+    codUsuario: number;
+    nombreUsuario: string;
+  };
+  responsable?: {
+    codResponsable: number;
+    nombreResponsable: string;
+  };
+  inventariador?: {
+    codInventariador: number;
+    nombreInventariador: string;
+  };
 }
 
 export const cargaService = {
@@ -38,27 +72,31 @@ export const cargaService = {
     return response.data;
   },
 
-  // Método Legacy (Asignar la carga completa a un usuario del sistema para inventariar)
-  // Se mantiene por si necesitas delegar la tarea de inventario a alguien.
   asignar: async (codCarga: number, codUsuario: number): Promise<void> => {
     await api.post(`${RESOURCE}/${codCarga}/asignar/${codUsuario}`);
   },
 
   subirArchivoConMapeo: async (
-    codCarga: number, 
-    archivo: File, 
+    codCarga: number,
+    archivo: File,
     mapeo: Record<string, string>,
-    configuracion: CampoConfig[] 
+    configuracion: CampoConfig[],
+    ubicacionUnica?: UbicacionUnica
   ): Promise<CargaMasivaResponse> => {
-    
     const formData = new FormData();
     formData.append('file', archivo);
     formData.append('mapeo', JSON.stringify(mapeo));
-    formData.append('configuracion', JSON.stringify(configuracion)); 
+    formData.append('configuracion', JSON.stringify(configuracion));
+
+    if (ubicacionUnica) {
+      formData.append('codLocalUnico', ubicacionUnica.codLocalUnico.toString());
+      formData.append('codAreaUnica', ubicacionUnica.codAreaUnica.toString());
+      formData.append('codOficinaUnica', ubicacionUnica.codOficinaUnica.toString());
+    }
 
     const response = await api.post<CargaMasivaResponse>(
-      `${RESOURCE}/${codCarga}/importar-mapeado`, 
-      formData, 
+      `${RESOURCE}/${codCarga}/importar-mapeado`,
+      formData,
       {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
@@ -72,14 +110,18 @@ export const cargaService = {
     return response.data;
   },
 
-  // ✅ Obtener conteo de filas (Para la barra de progreso)
   obtenerConteo: async (codCarga: number): Promise<number> => {
     const response = await api.get<{ total: number }>(`${RESOURCE}/${codCarga}/conteo`);
     return response.data.total;
   },
 
-  // ✅ Enviar la distribución por rangos (Asignando Responsables)
   distribuir: async (codCarga: number, distribuciones: RangoDistribucion[]): Promise<void> => {
     await api.post(`${RESOURCE}/${codCarga}/distribuir`, distribuciones);
+  },
+
+  // ✅ CORREGIDO: Tipo específico en lugar de any[]
+  obtenerDetalle: async (codCarga: number): Promise<DetalleCarga[]> => {
+    const response = await api.get<DetalleCarga[]>(`${RESOURCE}/${codCarga}/detalle`);
+    return response.data;
   }
 };

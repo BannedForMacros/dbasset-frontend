@@ -8,30 +8,21 @@ import { localService, Local } from '../../../services/local.service';
 import { 
   MdAdd, MdEdit, MdDelete, MdPerson, MdBusiness, 
   MdLocationOn, MdFilterList, MdClose, MdSave,
-  MdSearch, MdClear, MdLayers, MdMeetingRoom
+  MdSearch, MdClear, MdLayers, MdMeetingRoom, MdDomain
 } from 'react-icons/md';
 
-// --- COMPONENTE AUXILIAR: AVATAR ---
+// --- COMPONENTE AVATAR SIMPLE ---
 const UserAvatar = ({ name }: { name: string }) => {
-  const initials = name
-    .split(' ')
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-  
-  const colors = ['bg-blue-500', 'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 'bg-teal-500', 'bg-orange-500'];
-  const colorIndex = name.length % colors.length;
-
+  const initials = name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
   return (
-    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm ${colors[colorIndex]}`}>
+    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200">
       {initials}
     </div>
   );
 };
 
 export default function ResponsablesPage() {
-  // --- ESTADOS ---
+  // --- DATOS MAESTROS ---
   const [responsables, setResponsables] = useState<Responsable[]>([]);
   const [locales, setLocales] = useState<Local[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -41,24 +32,26 @@ export default function ResponsablesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
 
-  // Filtros
+  // --- FILTROS TABLA ---
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroLocal, setFiltroLocal] = useState('');
-  const [filtroArea, setFiltroArea] = useState('');
-  const [filtroOficina, setFiltroOficina] = useState('');
 
-  // Formulario
+  // --- FORMULARIO (ESTADO) ---
   const initialFormState = {
     nombreResponsable: '',
     cargo: '',
     codInterno: '',
-    codLocal: '',
-    codArea: '',
-    codOficina: ''
+    // Estos son temporales para los selectores de agregar
+    tempLocal: '',
+    tempArea: '',
+    tempOficina: ''
   };
   const [formData, setFormData] = useState(initialFormState);
+  
+  // ✅ ESTADO CRÍTICO: Lista de Oficinas seleccionadas (Many-to-Many)
+  const [oficinasSeleccionadas, setOficinasSeleccionadas] = useState<Oficina[]>([]);
 
-  // --- CARGA DE DATOS ---
+  // --- CARGA INICIAL ---
   useEffect(() => {
     cargarDatos();
   }, []);
@@ -83,114 +76,81 @@ export default function ResponsablesPage() {
     }
   };
 
-  // --- FUNCIÓN AUXILIAR: OBTENER JERARQUÍA COMPLETA ---
-  const getJerarquia = (responsable: Responsable) => {
-    const ofiId = (responsable.oficina as Oficina)?.codOficina;
-    const oficina = oficinas.find(o => o.codOficina === ofiId);
-    const areaId = (oficina?.area as Area)?.codArea;
-    const area = areas.find(a => a.codArea === areaId);
-    const localId = (area?.local as Local)?.codLocal;
-    const local = locales.find(l => l.codLocal === localId);
-
-    return {
-      oficina: oficina?.nombreOficina || 'Sin Oficina',
-      area: area?.nombreArea || 'Sin Área',
-      local: local?.nombreLocal || 'Sin Local',
-      oficinaId: ofiId,
-      areaId,
-      localId
-    };
-  };
-
-  // --- LÓGICA DE FILTRADO PARA LA TABLA ---
+  // --- LÓGICA FILTRADO TABLA ---
   const responsablesFiltrados = useMemo(() => {
     let filtered = responsables;
 
-    // Filtrar por Local
+    // Filtro Local (Busca si ALGUNA oficina del responsable pertenece al local)
     if (filtroLocal) {
-      filtered = filtered.filter(resp => {
-        const jerarquia = getJerarquia(resp);
-        return jerarquia.localId === Number(filtroLocal);
-      });
+      filtered = filtered.filter(resp => 
+        resp.oficinas?.some(ofi => {
+          const ofiFull = oficinas.find(o => o.codOficina === ofi.codOficina);
+          const areaFull = areas.find(a => a.codArea === (ofiFull?.area as Area)?.codArea);
+          return (areaFull?.local as Local)?.codLocal === Number(filtroLocal);
+        })
+      );
     }
 
-    // Filtrar por Área
-    if (filtroArea) {
-      filtered = filtered.filter(resp => {
-        const jerarquia = getJerarquia(resp);
-        return jerarquia.areaId === Number(filtroArea);
-      });
-    }
-
-    // Filtrar por Oficina
-    if (filtroOficina) {
-      filtered = filtered.filter(resp => {
-        const jerarquia = getJerarquia(resp);
-        return jerarquia.oficinaId === Number(filtroOficina);
-      });
-    }
-
-    // Filtrar por búsqueda de texto
+    // Búsqueda Texto
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(resp => {
-        const jerarquia = getJerarquia(resp);
-        return (
-          resp.nombreResponsable.toLowerCase().includes(term) ||
-          (resp.cargo || '').toLowerCase().includes(term) ||
-          (resp.codInterno || '').toLowerCase().includes(term) ||
-          jerarquia.oficina.toLowerCase().includes(term) ||
-          jerarquia.area.toLowerCase().includes(term) ||
-          jerarquia.local.toLowerCase().includes(term)
-        );
-      });
+      filtered = filtered.filter(resp => 
+        resp.nombreResponsable.toLowerCase().includes(term) ||
+        (resp.codInterno || '').toLowerCase().includes(term) ||
+        (resp.cargo || '').toLowerCase().includes(term)
+      );
     }
 
     return filtered;
-  }, [responsables, filtroLocal, filtroArea, filtroOficina, searchTerm, oficinas, areas, locales]);
+  }, [responsables, filtroLocal, searchTerm, oficinas, areas]);
 
-  // --- LÓGICA PARA FILTROS EN CASCADA ---
-  const areasDisponiblesFiltro = filtroLocal
-    ? areas.filter(a => (a.local as Local)?.codLocal === Number(filtroLocal))
-    : areas;
-
-  const oficinasDisponiblesFiltro = filtroArea
-    ? oficinas.filter(o => (o.area as Area)?.codArea === Number(filtroArea))
-    : filtroLocal
-    ? oficinas.filter(o => {
-        const area = areas.find(a => a.codArea === (o.area as Area)?.codArea);
-        return (area?.local as Local)?.codLocal === Number(filtroLocal);
-      })
-    : oficinas;
-
-  // --- LÓGICA PARA EL FORMULARIO (CASCADA) ---
-  const areasFiltradasForm = formData.codLocal 
-    ? areas.filter(a => (a.local as Local)?.codLocal === Number(formData.codLocal))
+  // --- CASCADAS PARA EL FORMULARIO (Solo visuales para seleccionar) ---
+  const areasParaForm = formData.tempLocal 
+    ? areas.filter(a => (a.local as Local)?.codLocal === Number(formData.tempLocal))
     : [];
-  const oficinasFiltradasForm = formData.codArea
-    ? oficinas.filter(o => (o.area as Area)?.codArea === Number(formData.codArea))
+  
+  const oficinasParaForm = formData.tempArea
+    ? oficinas.filter(o => (o.area as Area)?.codArea === Number(formData.tempArea))
     : [];
 
-  // --- HANDLERS ---
+  // --- HANDLERS DE OFICINAS (AGREGAR / QUITAR) ---
+  const handleAddOficina = () => {
+    if (!formData.tempOficina) return;
+    
+    // Verificar si ya existe
+    const exists = oficinasSeleccionadas.some(o => o.codOficina === Number(formData.tempOficina));
+    if (exists) {
+      alert('Esta oficina ya está asignada.');
+      return;
+    }
+
+    const oficinaObj = oficinas.find(o => o.codOficina === Number(formData.tempOficina));
+    if (oficinaObj) {
+      setOficinasSeleccionadas([...oficinasSeleccionadas, oficinaObj]);
+      // Resetear selectores temporales para agregar otra rápidamente
+      setFormData({ ...formData, tempOficina: '' }); 
+    }
+  };
+
+  const handleRemoveOficina = (codOficina: number) => {
+    setOficinasSeleccionadas(prev => prev.filter(o => o.codOficina !== codOficina));
+  };
+
+  // --- CRUD HANDLERS ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.codOficina) { 
-      alert('Seleccione Oficina'); 
+    if (oficinasSeleccionadas.length === 0) { 
+      alert('Debe asignar al menos una Oficina al custodio.'); 
       return; 
     }
 
-    const oficinaSelec = oficinas.find(o => o.codOficina === Number(formData.codOficina));
-    const areaSelec = areas.find(a => a.codArea === (oficinaSelec?.area as Area)?.codArea);
-    const localSelec = locales.find(l => l.codLocal === (areaSelec?.local as Local)?.codLocal);
-
+    // Construir payload con la lista de oficinas
     const payload = {
       nombreResponsable: formData.nombreResponsable,
       cargo: formData.cargo,
       codInterno: formData.codInterno,
-      oficina: { codOficina: Number(formData.codOficina) },
-      codArea: areaSelec?.codArea || Number(formData.codArea), 
-      codLocal: localSelec?.codLocal || Number(formData.codLocal)
+      oficinas: oficinasSeleccionadas.map(o => ({ codOficina: o.codOficina }))
     } as unknown as Responsable; 
 
     try {
@@ -200,530 +160,307 @@ export default function ResponsablesPage() {
       cargarDatos();
     } catch (error) { 
       console.error(error); 
-      alert('Error al guardar'); 
+      alert('Error al guardar.'); 
     }
   };
 
   const handleEdit = (resp: Responsable) => {
     setEditingId(resp.codResponsable || null);
     
-    const oficinaId = (resp.oficina as Oficina)?.codOficina;
-    const oficinaActual = oficinas.find(o => o.codOficina === oficinaId);
-    const areaId = (oficinaActual?.area as Area)?.codArea; 
-    const areaActual = areas.find(a => a.codArea === areaId);
-    const localId = (areaActual?.local as Local)?.codLocal;
+    // Cargar oficinas existentes (asegurando que sean objetos completos buscando en el catálogo)
+    const oficinasDelResponsable = (resp.oficinas || []).map(ofi => 
+      oficinas.find(o => o.codOficina === ofi.codOficina) || ofi
+    ) as Oficina[];
+
+    setOficinasSeleccionadas(oficinasDelResponsable);
 
     setFormData({
+      ...initialFormState,
       nombreResponsable: resp.nombreResponsable,
       cargo: resp.cargo,
       codInterno: resp.codInterno,
-      codLocal: localId?.toString() || '',
-      codArea: areaId?.toString() || '',
-      codOficina: oficinaId?.toString() || ''
     });
     setShowModal(true);
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('¿Eliminar este responsable?')) {
+    if (confirm('¿Eliminar este custodio?')) {
       try { 
         await responsableService.eliminar(id); 
         cargarDatos(); 
-      } catch (e) { 
-        console.error(e);
-        alert('Error al eliminar'); 
-      }
+      } catch (e) { console.error(e); }
     }
   };
 
   const openNewModal = () => { 
     setEditingId(null); 
-    setFormData(initialFormState); 
+    setFormData(initialFormState);
+    setOficinasSeleccionadas([]);
     setShowModal(true); 
   };
   
   const closeModal = () => { 
     setShowModal(false); 
-    setFormData(initialFormState); 
+    setFormData(initialFormState);
+    setOficinasSeleccionadas([]);
   };
-
-  const limpiarFiltros = () => {
-    setFiltroLocal('');
-    setFiltroArea('');
-    setFiltroOficina('');
-    setSearchTerm('');
-  };
-
-  const hayFiltrosActivos = filtroLocal || filtroArea || filtroOficina || searchTerm;
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-6 animate-fadeIn max-w-7xl mx-auto pb-10">
       
-      {/* Header */}
+      {/* Header Limpio */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Custodios</h1>
-          <p className="text-gray-600 mt-1 flex items-center gap-2">
-            <MdPerson className="text-gray-400" size={18}/>
-            Gestión de personal y asignaciones por ubicación
+          <p className="text-gray-500 mt-1 flex items-center gap-2">
+            <MdPerson className="text-blue-600"/> Gestión de personal y asignaciones múltiples
           </p>
         </div>
         <button 
           onClick={openNewModal} 
-          className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg font-medium"
+          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition shadow-md font-medium"
         >
-          <MdAdd size={22} />
-          <span>Nuevo Custodio</span>
+          <MdAdd size={20} /> Nuevo Custodio
         </button>
       </div>
 
-      {/* Stats - Solo Total Custodios */}
-      <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm w-fit">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-indigo-100 text-indigo-600 rounded-lg">
-            <MdPerson size={28}/>
+      {/* Barra de Filtros */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="relative w-full md:w-80">
+            <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Buscar por nombre o código..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+            />
           </div>
-          <div>
-            <p className="text-sm text-gray-600 font-medium">Total de Custodios</p>
-            <p className="text-3xl font-bold text-gray-900">{responsables.length}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Filtros y Búsqueda */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2 text-gray-700">
-            <MdFilterList size={20} className="text-gray-500" />
-            <span className="font-semibold">Filtros de Búsqueda</span>
-          </div>
-          {hayFiltrosActivos && (
-            <button
-              onClick={limpiarFiltros}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition font-medium"
-            >
-              <MdClear size={16} />
-              Limpiar Filtros
-            </button>
-          )}
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Filtro por Local */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase">
-              <div className="flex items-center gap-1.5">
-                <MdBusiness size={14} className="text-blue-600" />
-                Local (Sede)
-              </div>
-            </label>
-            <select
-              value={filtroLocal}
-              onChange={(e) => {
-                setFiltroLocal(e.target.value);
-                setFiltroArea('');
-                setFiltroOficina('');
-              }}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white text-sm"
-            >
-              <option value="">Todos los Locales</option>
-              {locales.map(l => (
-                <option key={l.codLocal} value={l.codLocal}>
-                  {l.nombreLocal}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Filtro por Área */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase">
-              <div className="flex items-center gap-1.5">
-                <MdLayers size={14} className="text-purple-600" />
-                Área
-              </div>
-            </label>
-            <select
-              value={filtroArea}
-              onChange={(e) => {
-                setFiltroArea(e.target.value);
-                setFiltroOficina('');
-              }}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-white text-sm"
-            >
-              <option value="">Todas las Áreas</option>
-              {areasDisponiblesFiltro.map(a => (
-                <option key={a.codArea} value={a.codArea}>
-                  {a.nombreArea}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Filtro por Oficina */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase">
-              <div className="flex items-center gap-1.5">
-                <MdMeetingRoom size={14} className="text-green-600" />
-                Oficina
-              </div>
-            </label>
-            <select
-              value={filtroOficina}
-              onChange={(e) => setFiltroOficina(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white text-sm"
-            >
-              <option value="">Todas las Oficinas</option>
-              {oficinasDisponiblesFiltro.map(o => (
-                <option key={o.codOficina} value={o.codOficina}>
-                  {o.nombreOficina}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Búsqueda de Texto */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase">
-              <div className="flex items-center gap-1.5">
-                <MdSearch size={14} className="text-indigo-600" />
-                Búsqueda General
-              </div>
-            </label>
-            <div className="relative">
-              <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por nombre, cargo, código..."
-                className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <MdClear size={18} />
-                </button>
-              )}
-            </div>
-          </div>
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <MdFilterList className="text-gray-400"/>
+          <select 
+            value={filtroLocal}
+            onChange={e => setFiltroLocal(e.target.value)}
+            className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500"
+          >
+            <option value="">Todas las Sedes</option>
+            {locales.map(l => <option key={l.codLocal} value={l.codLocal}>{l.nombreLocal}</option>)}
+          </select>
         </div>
-
-        {/* Resumen de Filtros Activos */}
-        {hayFiltrosActivos && (
-          <div className="mt-4 flex items-center gap-2 text-sm">
-            <span className="text-gray-600 font-medium">Mostrando:</span>
-            <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full font-semibold">
-              {responsablesFiltrados.length} de {responsables.length} custodios
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Tabla */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-          </div>
-        ) : responsablesFiltrados.length === 0 ? (
-          <div className="text-center py-20">
-            <MdPerson className="mx-auto text-gray-300 mb-4" size={64} />
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">
-              {hayFiltrosActivos ? 'No se encontraron custodios' : 'No hay custodios registrados'}
-            </h3>
-            <p className="text-gray-500 mb-6">
-              {hayFiltrosActivos 
-                ? 'Intenta ajustar los filtros o realizar otra búsqueda'
-                : 'Comienza registrando tu primer custodio'
-              }
-            </p>
-            {!hayFiltrosActivos && (
-              <button
-                onClick={openNewModal}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium"
-              >
-                <MdAdd size={20} />
-                Crear Primer Custodio
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Custodio
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Ubicación
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Código
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {responsablesFiltrados.map((resp) => {
-                  const jerarquia = getJerarquia(resp);
-
-                  return (
-                    <tr key={resp.codResponsable} className="hover:bg-indigo-50/30 transition-colors">
-                      {/* Custodio y Cargo */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-4">
-                          <UserAvatar name={resp.nombreResponsable} />
-                          <div>
-                            <p className="font-bold text-gray-900">
-                              {resp.nombreResponsable}
-                            </p>
-                            <p className="text-sm text-gray-600 mt-0.5">
-                              {resp.cargo || 'Sin cargo especificado'}
-                            </p>
-                          </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase font-bold tracking-wider text-left">
+              <tr>
+                <th className="px-6 py-4">Custodio</th>
+                <th className="px-6 py-4">Oficinas Asignadas</th>
+                <th className="px-6 py-4">Código</th>
+                <th className="px-6 py-4 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 text-sm">
+              {loading ? (
+                <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">Cargando...</td></tr>
+              ) : responsablesFiltrados.length === 0 ? (
+                <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">No se encontraron registros</td></tr>
+              ) : (
+                responsablesFiltrados.map((resp) => (
+                  <tr key={resp.codResponsable} className="hover:bg-blue-50/30 transition">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <UserAvatar name={resp.nombreResponsable} />
+                        <div>
+                          <p className="font-bold text-gray-900">{resp.nombreResponsable}</p>
+                          <p className="text-xs text-gray-500">{resp.cargo || 'Sin cargo'}</p>
                         </div>
-                      </td>
-
-                      {/* Ubicación Jerárquica */}
-                      <td className="px-6 py-4">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2 text-sm">
-                            <MdBusiness className="text-blue-600" size={16} />
-                            <span className="font-semibold text-gray-900">{jerarquia.local}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <MdLayers className="text-purple-600" size={16} />
-                            <span className="text-gray-700">{jerarquia.area}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <MdMeetingRoom className="text-green-600" size={16} />
-                            <span className="text-gray-700">{jerarquia.oficina}</span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Código */}
-                      <td className="px-6 py-4">
-                        <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 font-mono">
-                          {resp.codInterno || 'N/A'}
-                        </span>
-                      </td>
-
-                      {/* Acciones */}
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button 
-                            onClick={() => handleEdit(resp)} 
-                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                            title="Editar"
-                          >
-                            <MdEdit size={20} />
-                          </button>
-                          <button 
-                            onClick={() => resp.codResponsable && handleDelete(resp.codResponsable)} 
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                            title="Eliminar"
-                          >
-                            <MdDelete size={20} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-1">
+                        {resp.oficinas && resp.oficinas.length > 0 ? (
+                          resp.oficinas.map((ofi, idx) => {
+                            // Buscar nombre completo si falta (en caso de lazy load issues)
+                            const ofiName = oficinas.find(o => o.codOficina === ofi.codOficina)?.nombreOficina || 'Oficina';
+                            return (
+                              <span key={idx} className="flex items-center gap-1.5 text-gray-700">
+                                <MdMeetingRoom className="text-blue-400" size={14}/> {ofiName}
+                              </span>
+                            );
+                          })
+                        ) : (
+                          <span className="text-gray-400 italic">Sin asignación</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded font-mono text-xs font-bold border border-gray-200">
+                        {resp.codInterno || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => handleEdit(resp)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition"><MdEdit size={18}/></button>
+                        <button onClick={() => resp.codResponsable && handleDelete(resp.codResponsable)} className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"><MdDelete size={18}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 text-right text-xs text-gray-500">
+          Total: {responsablesFiltrados.length} registros
+        </div>
       </div>
 
-      {/* Modal */}
+      {/* Modal - Diseño Sólido y Limpio */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl my-8 max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
             
-            {/* Header */}
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 border-b flex justify-between items-center rounded-t-xl flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <MdPerson className="text-white" size={24} />
+            <div className="bg-blue-600 px-6 py-4 flex justify-between items-center shrink-0">
+              <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                <MdPerson className="text-blue-200"/> {editingId ? 'Editar Custodio' : 'Nuevo Custodio'}
+              </h3>
+              <button onClick={closeModal} className="text-white hover:bg-blue-700 p-1 rounded-full transition"><MdClose size={20}/></button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto">
+              
+              {/* Datos Personales */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre Completo <span className="text-red-500">*</span></label>
+                  <input 
+                    type="text" required value={formData.nombreResponsable} 
+                    onChange={e => setFormData({...formData, nombreResponsable: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
                 <div>
-                  <h3 className="font-bold text-xl text-white">
-                    {editingId ? 'Editar Custodio' : 'Nuevo Custodio'}
-                  </h3>
-                  <p className="text-sm text-indigo-100">
-                    Complete la información del personal
-                  </p>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Cargo</label>
+                  <input 
+                    type="text" value={formData.cargo} 
+                    onChange={e => setFormData({...formData, cargo: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Código Interno</label>
+                  <input 
+                    type="text" value={formData.codInterno} 
+                    onChange={e => setFormData({...formData, codInterno: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                  />
                 </div>
               </div>
-              <button 
-                onClick={closeModal} 
-                className="text-white/80 hover:text-white text-2xl"
-              >
-                &times;
-              </button>
-            </div>
-            
-            {/* Form */}
-            <form id="form-responsable" onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto flex-1">
-              
-              {/* Sección: Información Personal */}
-              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-                  <div className="w-1 h-4 bg-indigo-600 rounded"></div>
-                  Información Personal
+
+              {/* Asignación de Oficinas */}
+              <div className="border-t border-gray-100 pt-4">
+                <h4 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+                  <MdBusiness className="text-blue-600"/> Asignación de Ubicaciones
                 </h4>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Nombre Completo <span className="text-red-500">*</span>
-                    </label>
-                    <input 
-                      type="text" 
-                      value={formData.nombreResponsable} 
-                      onChange={(e) => setFormData({ ...formData, nombreResponsable: e.target.value })} 
-                      required 
-                      placeholder="Ej. Juan Carlos Pérez López"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Cargo
-                    </label>
-                    <input 
-                      type="text" 
-                      value={formData.cargo} 
-                      onChange={(e) => setFormData({ ...formData, cargo: e.target.value })} 
-                      placeholder="Ej. Analista de TI"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Código Interno / DNI
-                    </label>
-                    <input 
-                      type="text" 
-                      value={formData.codInterno} 
-                      onChange={(e) => setFormData({ ...formData, codInterno: e.target.value })} 
-                      placeholder="EMP-001"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Sección: Asignación de Ubicación */}
-              <div className="bg-blue-50 p-5 rounded-lg border border-blue-200">
-                <h4 className="text-sm font-bold text-blue-900 mb-4 flex items-center gap-2">
-                  <div className="w-1 h-4 bg-blue-600 rounded"></div>
-                  Asignación de Ubicación
-                </h4>
-
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Local */}
+                {/* Selectores Cascada para AGREGAR */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        <div className="flex items-center gap-1.5">
-                          <MdBusiness className="text-blue-600" size={16} />
-                          Local (Sede) <span className="text-red-500">*</span>
-                        </div>
-                      </label>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">1. Local</label>
                       <select 
-                        value={formData.codLocal} 
-                        onChange={(e) => setFormData({ ...formData, codLocal: e.target.value, codArea: '', codOficina: '' })} 
-                        required
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                        value={formData.tempLocal}
+                        onChange={e => setFormData({...formData, tempLocal: e.target.value, tempArea: '', tempOficina: ''})}
+                        className="w-full px-2 py-2 border border-gray-300 rounded text-sm outline-none focus:border-blue-500"
                       >
-                        <option value="">-- Seleccionar Local --</option>
-                        {locales.map(l => (
-                          <option key={l.codLocal} value={l.codLocal}>
-                            {l.nombreLocal}
-                          </option>
-                        ))}
+                        <option value="">Seleccionar Local</option>
+                        {locales.map(l => <option key={l.codLocal} value={l.codLocal}>{l.nombreLocal}</option>)}
                       </select>
                     </div>
-
-                    {/* Área */}
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        <div className="flex items-center gap-1.5">
-                          <MdLayers className="text-purple-600" size={16} />
-                          Área <span className="text-red-500">*</span>
-                        </div>
-                      </label>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">2. Área</label>
                       <select 
-                        value={formData.codArea} 
-                        onChange={(e) => setFormData({ ...formData, codArea: e.target.value, codOficina: '' })} 
-                        disabled={!formData.codLocal}
-                        required
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        value={formData.tempArea}
+                        onChange={e => setFormData({...formData, tempArea: e.target.value, tempOficina: ''})}
+                        disabled={!formData.tempLocal}
+                        className="w-full px-2 py-2 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 disabled:bg-gray-100"
                       >
-                        <option value="">
-                          {formData.codLocal ? '-- Seleccionar Área --' : '-- Primero seleccione un Local --'}
-                        </option>
-                        {areasFiltradasForm.map(a => (
-                          <option key={a.codArea} value={a.codArea}>
-                            {a.nombreArea}
-                          </option>
-                        ))}
+                        <option value="">Seleccionar Área</option>
+                        {areasParaForm.map(a => <option key={a.codArea} value={a.codArea}>{a.nombreArea}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">3. Oficina</label>
+                      <select 
+                        value={formData.tempOficina}
+                        onChange={e => setFormData({...formData, tempOficina: e.target.value})}
+                        disabled={!formData.tempArea}
+                        className="w-full px-2 py-2 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 disabled:bg-gray-100"
+                      >
+                        <option value="">Seleccionar Oficina</option>
+                        {oficinasParaForm.map(o => <option key={o.codOficina} value={o.codOficina}>{o.nombreOficina}</option>)}
                       </select>
                     </div>
                   </div>
+                  <button 
+                    type="button" 
+                    onClick={handleAddOficina}
+                    disabled={!formData.tempOficina}
+                    className="w-full py-2 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+                  >
+                    + Agregar esta Oficina
+                  </button>
+                </div>
 
-                  {/* Oficina */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <MdMeetingRoom className="text-green-600" size={16} />
-                        Oficina <span className="text-red-500">*</span>
-                      </div>
-                    </label>
-                    <select 
-                      value={formData.codOficina} 
-                      onChange={(e) => setFormData({ ...formData, codOficina: e.target.value })} 
-                      disabled={!formData.codArea}
-                      required
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <option value="">
-                        {formData.codArea ? '-- Seleccionar Oficina --' : '-- Primero seleccione un Área --'}
-                      </option>
-                      {oficinasFiltradasForm.map(o => (
-                        <option key={o.codOficina} value={o.codOficina}>
-                          {o.nombreOficina}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                {/* Lista de Oficinas Seleccionadas */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Oficinas Asignadas ({oficinasSeleccionadas.length})</label>
+                  {oficinasSeleccionadas.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic bg-gray-50 p-3 rounded border border-dashed border-gray-300 text-center">
+                      No hay oficinas asignadas. Utilice los selectores de arriba para agregar.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto pr-1">
+                      {oficinasSeleccionadas.map((ofi, idx) => {
+                        // Reconstruir contexto para mostrar (Local > Area)
+                        const area = areas.find(a => a.codArea === (ofi.area as Area)?.codArea);
+                        const local = locales.find(l => l.codLocal === (area?.local as Local)?.codLocal);
+                        
+                        return (
+                          <div key={idx} className="flex justify-between items-center p-3 bg-blue-50 border border-blue-100 rounded-lg group">
+                            <div>
+                              <p className="font-bold text-blue-900 text-sm">{ofi.nombreOficina}</p>
+                              <p className="text-xs text-blue-600 flex items-center gap-1">
+                                <MdDomain size={12}/> {local?.nombreLocal} / {area?.nombreArea}
+                              </p>
+                            </div>
+                            <button 
+                              type="button"
+                              onClick={() => handleRemoveOficina(ofi.codOficina!)}
+                              className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition"
+                              title="Quitar"
+                            >
+                              <MdDelete size={18}/>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
+
             </form>
 
-            {/* Footer */}
-            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3 flex-shrink-0 rounded-b-xl">
-              <button 
-                type="button"
-                onClick={closeModal} 
-                className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition"
-              >
-                Cancelar
-              </button>
-              <button 
-                type="submit" 
-                form="form-responsable" 
-                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium rounded-lg hover:from-indigo-700 hover:to-purple-700 transition shadow-md flex items-center gap-2"
-              >
-                <MdSave size={20}/>
-                {editingId ? 'Actualizar' : 'Guardar'}
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3 shrink-0">
+              <button type="button" onClick={closeModal} className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-100 transition">Cancelar</button>
+              <button type="submit" onClick={handleSubmit} className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition shadow flex items-center gap-2">
+                <MdSave size={18}/> Guardar Custodio
               </button>
             </div>
           </div>
