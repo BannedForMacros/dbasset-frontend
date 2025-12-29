@@ -2,17 +2,18 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import * as XLSX from 'xlsx';
-import { MdAdd, MdArrowForward, MdClose, MdCheck, MdInbox } from 'react-icons/md';
+import { MdAdd, MdArrowForward, MdClose, MdCheck, MdInbox, MdVisibility } from 'react-icons/md';
 
 import { cargaService, Carga, UbicacionUnica } from '../../../services/carga.service';
-import { responsableService } from '../../../services/responsable.service';
-import { inventariadorService } from '../../../services/inventariador.service';
+import { responsableService, Responsable } from '../../../services/responsable.service';
+import { inventariadorService, Inventariador } from '../../../services/inventariador.service';
 import { configuracionService, CampoConfig } from '../../../services/configuracion.service';
 import { localService, Local } from '../../../services/local.service';
 import { areaService, Area } from '../../../services/area.service';
 import { oficinaService, Oficina } from '../../../services/oficina.service';
 
 import Toast from './components/Toast';
+import CargaDetalleModal from './components/CargaDetalleModal';
 import Step1Descripcion from './components/WizardSteps/Step1Descripcion';
 import Step2CargarExcel from './components/WizardSteps/Step2CargarExcel';
 import Step3Mapeo from './components/WizardSteps/Step3Mapeo';
@@ -23,11 +24,16 @@ import Step7Confirmacion from './components/WizardSteps/Step7Confirmacion';
 
 type ExcelRow = Record<string, string | number | boolean | null | undefined>;
 
-interface Assignment {
+interface ResponsableAssignment {
   inicio: number;
   fin: number;
   codResponsable?: number;
   nombreResponsable?: string;
+}
+
+interface InventariadorAssignment {
+  inicio: number;
+  fin: number;
   codInventariador?: number;
   nombreInventariador?: string;
 }
@@ -62,12 +68,16 @@ export default function CargasPage() {
 
   const [responsables, setResponsables] = useState<Person[]>([]);
   const [inventariadores, setInventariadores] = useState<Person[]>([]);
-  const [responsableAssignments, setResponsableAssignments] = useState<Assignment[]>([]);
-  const [inventariadorAssignments, setInventariadorAssignments] = useState<Assignment[]>([]);
+  const [responsableAssignments, setResponsableAssignments] = useState<ResponsableAssignment[]>([]);
+  const [inventariadorAssignments, setInventariadorAssignments] = useState<InventariadorAssignment[]>([]);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
 
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'warning' | 'info'; message: string; details?: string } | null>(null);
+
+  // Estado para modal de detalles
+  const [showDetalleModal, setShowDetalleModal] = useState(false);
+  const [cargaSeleccionadaDetalle, setCargaSeleccionadaDetalle] = useState<Carga | null>(null);
 
   useEffect(() => {
     cargarDatos();
@@ -216,7 +226,6 @@ export default function CargasPage() {
       return;
     }
 
-    // ✅ VALIDAR UBICACIÓN
     const tieneLocal = !!mapeo['cod_local'];
     const tieneArea = !!mapeo['cod_area'];
     const tieneOficina = !!mapeo['cod_oficina'];
@@ -247,7 +256,6 @@ export default function CargasPage() {
   };
 
   const handleStep5Next = () => {
-    // Puede continuar sin responsables (advertencia)
     if (responsableAssignments.length === 0) {
       const confirmar = confirm(
         '⚠️ No ha asignado ningún responsable.\n\n' +
@@ -262,7 +270,6 @@ export default function CargasPage() {
   };
 
   const handleStep6Next = () => {
-    // ✅ VALIDAR INVENTARIADORES (OBLIGATORIO)
     const inventariadorRows = new Set<number>();
     inventariadorAssignments.forEach(assignment => {
       for (let i = assignment.inicio; i <= assignment.fin; i++) {
@@ -284,84 +291,91 @@ export default function CargasPage() {
     setWizardStep(7);
   };
 
-  const handleConfirmarTodo = async () => {
-    if (!selectedCarga?.codCarga || !selectedFile) return;
+const handleConfirmarTodo = async () => {
+  if (!selectedCarga?.codCarga || !selectedFile) return;
 
-    setUploading(true);
+  setUploading(true);
 
-    try {
-      const resImport = await cargaService.subirArchivoConMapeo(
-        selectedCarga.codCarga,
-        selectedFile,
-        mapeo,
-        camposDinamicos,
-        ubicacionUnica || undefined
-      );
+  try {
+    const resImport = await cargaService.subirArchivoConMapeo(
+      selectedCarga.codCarga,
+      selectedFile,
+      mapeo,
+      camposDinamicos,
+      ubicacionUnica || undefined
+    );
 
-      // Combinar asignaciones
-      const allAssignments = [
-        ...responsableAssignments.map(a => ({
-          inicio: a.inicio,
-          fin: a.fin,
-          codResponsable: a.codResponsable,
-          codInventariador: undefined
-        })),
-        ...inventariadorAssignments.map(a => ({
-          inicio: a.inicio,
-          fin: a.fin,
-          codResponsable: undefined,
-          codInventariador: a.codInventariador
-        }))
-      ];
+    const allAssignments = [
+      ...responsableAssignments.map(a => ({
+        inicio: a.inicio,
+        fin: a.fin,
+        codResponsable: a.codResponsable,
+        codInventariador: undefined
+      })),
+      ...inventariadorAssignments.map(a => ({
+        inicio: a.inicio,
+        fin: a.fin,
+        codResponsable: undefined,
+        codInventariador: a.codInventariador
+      }))
+    ];
 
-      // Fusionar rangos que se solapan
-      const mergedMap = new Map<string, { codResponsable?: number; codInventariador?: number }>();
-      allAssignments.forEach(assignment => {
-        for (let i = assignment.inicio; i <= assignment.fin; i++) {
-          const key = `${i}`;
-          const current = mergedMap.get(key) || {};
-          if (assignment.codResponsable) current.codResponsable = assignment.codResponsable;
-          if (assignment.codInventariador) current.codInventariador = assignment.codInventariador;
-          mergedMap.set(key, current);
+    const mergedMap = new Map<string, { codResponsable?: number; codInventariador?: number }>();
+    allAssignments.forEach(assignment => {
+      for (let i = assignment.inicio; i <= assignment.fin; i++) {
+        const key = `${i}`;
+        const current = mergedMap.get(key) || {};
+        if (assignment.codResponsable) current.codResponsable = assignment.codResponsable;
+        if (assignment.codInventariador) current.codInventariador = assignment.codInventariador;
+        mergedMap.set(key, current);
+      }
+    });
+
+    const finalAssignments: { inicio: number; fin: number; codResponsable?: number; codInventariador?: number }[] = [];
+    let currentRange: { inicio: number; fin: number; codResponsable?: number; codInventariador?: number } | null = null;
+
+    Array.from(mergedMap.entries())
+      .sort((a, b) => Number(a[0]) - Number(b[0]))
+      .forEach(([key, value]) => {
+        const num = Number(key);
+        if (!currentRange) {
+          currentRange = { inicio: num, fin: num, ...value };
+        } else if (
+          num === currentRange.fin + 1 &&
+          value.codResponsable === currentRange.codResponsable &&
+          value.codInventariador === currentRange.codInventariador
+        ) {
+          currentRange.fin = num;
+        } else {
+          finalAssignments.push(currentRange);
+          currentRange = { inicio: num, fin: num, ...value };
         }
       });
 
-      // Reconstruir rangos optimizados
-      const finalAssignments: any[] = [];
-      let currentRange: any = null;
+    if (currentRange) finalAssignments.push(currentRange);
 
-      Array.from(mergedMap.entries())
-        .sort((a, b) => Number(a[0]) - Number(b[0]))
-        .forEach(([key, value]) => {
-          const num = Number(key);
-          if (!currentRange) {
-            currentRange = { inicio: num, fin: num, ...value };
-          } else if (
-            num === currentRange.fin + 1 &&
-            value.codResponsable === currentRange.codResponsable &&
-            value.codInventariador === currentRange.codInventariador
-          ) {
-            currentRange.fin = num;
-          } else {
-            finalAssignments.push(currentRange);
-            currentRange = { inicio: num, fin: num, ...value };
-          }
-        });
-
-      if (currentRange) finalAssignments.push(currentRange);
-
-      if (finalAssignments.length > 0) {
-        await cargaService.distribuir(selectedCarga.codCarga, finalAssignments);
-      }
-
-      showToast('success', '¡Completado!', `${resImport.totalProcesados} registros importados`);
-      setShowWizard(false);
-      cargarDatos();
-    } catch (error) {
-      showToast('error', 'Error en el proceso');
-    } finally {
-      setUploading(false);
+    if (finalAssignments.length > 0) {
+      await cargaService.distribuir(selectedCarga.codCarga, finalAssignments);
     }
+
+    // ✅ VERIFICAR EL ESTADO ACTUALIZADO DESDE EL BACKEND
+    const cargaActualizada = await cargaService.obtenerPorId(selectedCarga.codCarga);
+    console.log('Estado de la carga:', cargaActualizada.estado); // Para debugging
+
+    showToast('success', '¡Completado!', `${resImport.totalProcesados} registros importados`);
+    setShowWizard(false);
+    cargarDatos();
+
+  } catch (error) {
+    showToast('error', 'Error en el proceso');
+  } finally {
+    setUploading(false);
+  }
+};
+
+  const handleVerDetalles = (carga: Carga) => {
+    setCargaSeleccionadaDetalle(carga);
+    setShowDetalleModal(true);
   };
 
   const renderEstado = (estado: string) => {
@@ -482,13 +496,37 @@ export default function CargasPage() {
                       {renderEstado(carga.estado || 'C')}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {carga.estado?.trim() === 'T' ? (
-                        <span className="text-sm text-gray-500 italic">Completada</span>
-                      ) : (
-                        <button className="p-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition">
-                          <MdArrowForward size={20} />
-                        </button>
-                      )}
+                      <div className="flex justify-end gap-2">
+                        {(carga.estado?.trim() === 'A' || carga.estado?.trim() === 'T') && (
+                          <button
+                            onClick={() => handleVerDetalles(carga)}
+                            className="p-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition"
+                            title="Ver detalles"
+                          >
+                            <MdVisibility size={20} />
+                          </button>
+                        )}
+                        
+                        {carga.estado?.trim() !== 'T' && (
+                          <button 
+                            onClick={() => {
+                              setSelectedCarga(carga);
+                              setWizardStep(carga.estado?.trim() === 'C' ? 2 : 5);
+                              setShowWizard(true);
+                            }}
+                            className="p-2 border-2 border-green-600 text-green-600 rounded-lg hover:bg-green-600 hover:text-white transition"
+                            title="Continuar proceso"
+                          >
+                            <MdArrowForward size={20} />
+                          </button>
+                        )}
+
+                        {carga.estado?.trim() === 'T' && (
+                          <span className="text-sm text-gray-500 italic px-3">
+                            Completada
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -504,12 +542,23 @@ export default function CargasPage() {
         )}
       </div>
 
+      {/* Modal de Detalles */}
+      {showDetalleModal && cargaSeleccionadaDetalle && (
+        <CargaDetalleModal
+          codCarga={cargaSeleccionadaDetalle.codCarga!}
+          descripcion={cargaSeleccionadaDetalle.descripcion}
+          onClose={() => {
+            setShowDetalleModal(false);
+            setCargaSeleccionadaDetalle(null);
+          }}
+        />
+      )}
+
       {/* Modal Wizard */}
       {showWizard && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl flex flex-col max-h-[95vh]">
             
-            {/* Header */}
             <div className="bg-blue-600 px-6 py-5 rounded-t-xl">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-white">Proceso de Carga</h2>
@@ -521,7 +570,6 @@ export default function CargasPage() {
                 </button>
               </div>
               
-              {/* Steps */}
               <div className="flex items-center justify-between">
                 {getWizardSteps().map((step, idx) => (
                   <div key={step.num} className="flex items-center flex-1">
@@ -543,7 +591,6 @@ export default function CargasPage() {
               </div>
             </div>
 
-            {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
               {wizardStep === 1 && (
                 <Step1Descripcion
@@ -630,7 +677,6 @@ export default function CargasPage() {
               )}
             </div>
 
-            {/* Footer */}
             <div className="border-t bg-gray-50 px-6 py-4 flex justify-between rounded-b-xl">
               <div>
                 {wizardStep > 1 && (

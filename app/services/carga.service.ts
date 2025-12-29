@@ -33,31 +33,26 @@ export interface UbicacionUnica {
 
 // ✅ NUEVA INTERFAZ: Para el detalle de carga
 export interface DetalleCarga {
-  idDetalle: number;
-  codCarga: number;
-  codActivo: string;
-  inventariado: string;
-  codEstado: number;
+  id: number; // ✅ Agregar esta línea
+  idDetalle?: number; // Opcional, por si acaso
+  codActivo?: string;
+  inventariado?: string;
+  codEstado?: number;
   activo?: {
-    id: number;
-    codActivo: string;
+    codActivo?: string;
     descripcion?: string;
-    marca?: string;
-    modelo?: string;
-    serie?: string;
-    // Agrega más campos según necesites
-  };
-  usuario?: {
-    codUsuario: number;
-    nombreUsuario: string;
+    oficina?: {
+      codOficina?: number;
+      nombreOficina?: string;
+    };
   };
   responsable?: {
-    codResponsable: number;
-    nombreResponsable: string;
+    codResponsable?: number;
+    nombreResponsable?: string;
   };
   inventariador?: {
-    codInventariador: number;
-    nombreInventariador: string;
+    codInventariador?: number;
+    nombreInventariador?: string;
   };
 }
 
@@ -123,5 +118,12 @@ export const cargaService = {
   obtenerDetalle: async (codCarga: number): Promise<DetalleCarga[]> => {
     const response = await api.get<DetalleCarga[]>(`${RESOURCE}/${codCarga}/detalle`);
     return response.data;
+  },
+
+  obtenerPorId: async (codCarga: number): Promise<Carga> => {
+    const response = await api.get<Carga>(`${RESOURCE}/${codCarga}`);
+    return response.data;
   }
+
+  
 };
