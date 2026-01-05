@@ -11,6 +11,7 @@ import { configuracionService, CampoConfig } from '../../../services/configuraci
 import { localService, Local } from '../../../services/local.service';
 import { areaService, Area } from '../../../services/area.service';
 import { oficinaService, Oficina } from '../../../services/oficina.service';
+import { authService } from '../../../services/auth.service';
 
 import Toast from './components/Toast';
 import CargaDetalleModal from './components/CargaDetalleModal';
@@ -116,7 +117,20 @@ export default function CargasPage() {
 
   const iniciarWizard = async () => {
     try {
-      const campos = await configuracionService.obtenerCampos();
+    const user = authService.getUserData();
+    console.log('👤 Usuario completo:', user);
+    console.log('🏢 Empresa actual en wizard:', user?.currentCompanyId);
+    console.log('🔑 Auth header existe:', !!user?.authHeader);
+    
+    const campos = await configuracionService.obtenerCampos();
+    console.log('📋 Campos RAW del backend:', campos);
+    console.log('📋 Cantidad total:', campos.length);
+    
+    const camposVisibles = campos.filter(c => c.esVisible);
+    console.log('👁️ Campos visibles filtrados:', camposVisibles);
+    console.log('👁️ Cantidad visible:', camposVisibles.length);
+    
+    setCamposDinamicos(camposVisibles);
       setCamposDinamicos(campos.filter(c => c.esVisible));
 
       const [resps, invs] = await Promise.all([

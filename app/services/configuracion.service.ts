@@ -9,11 +9,13 @@ export interface CampoConfig {
   esVisible: boolean;
   esObligatorio: boolean;
   orden: number;
+  codEmpresa?: number; // ✅ Agregar esto
 }
 
 export const configuracionService = {
   obtenerCampos: async (): Promise<CampoConfig[]> => {
     const response = await api.get<CampoConfig[]>(RESOURCE);
+    console.log('🔧 Campos obtenidos:', response.data); // ✅ Debug
     return response.data;
   }
 };

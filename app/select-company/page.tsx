@@ -20,10 +20,16 @@ export default function SelectCompanyPage() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSelect = useCallback((empresa: Empresa) => {
-    authService.selectCompany(empresa.codEmpresa);
-    router.push('/dashboard');
-  }, [router]);
+const handleSelect = useCallback((empresa: Empresa) => {
+  console.log('🏢 Seleccionando empresa:', empresa.codEmpresa);
+  authService.selectCompany(empresa.codEmpresa);
+  
+  // ✅ Verificar que se guardó correctamente
+  const updated = authService.getUserData();
+  console.log('✅ Empresa guardada:', updated?.currentCompanyId);
+  
+  router.push('/dashboard');
+}, [router]);
 
   // Si no hay usuario, no renderizar nada (ya está redirigiendo)
   if (!user) return null;

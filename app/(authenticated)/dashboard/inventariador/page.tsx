@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { AxiosError } from 'axios'; // Importa en la parte superior
+import { AxiosError } from 'axios';
 import { inventariadorService, Inventariador } from '../../../services/inventariador.service';
 import { 
   MdAdd, MdEdit, MdDelete, MdPerson, MdSearch, 
   MdClose, MdSave, MdAssignmentInd, MdEmail, 
-  MdPhone, MdBadge, MdFilterList
+  MdPhone, MdBadge, MdLock, MdVisibility, MdVisibilityOff
 } from 'react-icons/md';
 
 // --- COMPONENTE AVATAR ---
@@ -26,6 +26,7 @@ export default function InventariadoresPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   // --- FORMULARIO ---
   const initialFormState = {
@@ -33,7 +34,8 @@ export default function InventariadoresPage() {
     dni: '',
     telefono: '',
     email: '',
-    codInterno: ''
+    codInterno: '',
+    password: '' // ✅ Solo visual, no se envía
   };
   const [formData, setFormData] = useState(initialFormState);
 
@@ -68,42 +70,42 @@ export default function InventariadoresPage() {
   }, [inventariadores, searchTerm]);
 
   // --- CRUD HANDLERS ---
-    const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.nombreInventariador.trim()) {
-        alert('El nombre es obligatorio');
-        return;
+      alert('El nombre es obligatorio');
+      return;
     }
 
+    // ✅ No enviamos password al backend
     const payload = {
-        nombreInventariador: formData.nombreInventariador,
-        dni: formData.dni || undefined,
-        telefono: formData.telefono || undefined,
-        email: formData.email || undefined,
-        codInterno: formData.codInterno || undefined
+      nombreInventariador: formData.nombreInventariador,
+      dni: formData.dni || undefined,
+      telefono: formData.telefono || undefined,
+      email: formData.email || undefined,
+      codInterno: formData.codInterno || undefined
     };
 
     try {
-        if (editingId) {
+      if (editingId) {
         await inventariadorService.actualizar(editingId, payload);
-        } else {
+      } else {
         await inventariadorService.crear(payload);
-        }
-        closeModal();
-        cargarDatos();
+      }
+      closeModal();
+      cargarDatos();
     } catch (error) {
-        // ✅ SOLUCIÓN 2: Tipo específico de Axios
-        console.error('Error al guardar:', error);
-        
-        const axiosError = error as AxiosError<{ mensaje?: string }>;
-        const mensaje = axiosError.response?.data?.mensaje 
+      console.error('Error al guardar:', error);
+      
+      const axiosError = error as AxiosError<{ mensaje?: string }>;
+      const mensaje = axiosError.response?.data?.mensaje 
         || axiosError.message 
         || 'Error al guardar el inventariador';
-        
-        alert(mensaje);
+      
+      alert(mensaje);
     }
-    };
+  };
 
   const handleEdit = (inv: Inventariador) => {
     setEditingId(inv.codInventariador || null);
@@ -112,7 +114,8 @@ export default function InventariadoresPage() {
       dni: inv.dni || '',
       telefono: inv.telefono || '',
       email: inv.email || '',
-      codInterno: inv.codInterno || ''
+      codInterno: inv.codInterno || '',
+      password: '' // Vacío al editar
     });
     setShowModal(true);
   };
@@ -139,6 +142,7 @@ export default function InventariadoresPage() {
     setShowModal(false);
     setFormData(initialFormState);
     setEditingId(null);
+    setShowPassword(false);
   };
 
   return (
@@ -362,6 +366,30 @@ export default function InventariadoresPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
                     placeholder="inventariador@email.com"
                   />
+                </div>
+              </div>
+
+              {/* ✅ CAMPO DE CONTRASEÑA (SOLO VISUAL) */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
+                  <MdLock size={16} className="text-gray-500" />
+                  Contraseña <span className="text-xs font-normal text-gray-500"></span>
+                </label>
+                <div className="relative">
+                  <input 
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password} 
+                    onChange={e => setFormData({...formData, password: e.target.value})}
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
+                  >
+                    {showPassword ? <MdVisibilityOff size={20} /> : <MdVisibility size={20} />}
+                  </button>
                 </div>
               </div>
 
