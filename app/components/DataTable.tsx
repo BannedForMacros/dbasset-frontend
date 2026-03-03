@@ -1,20 +1,21 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
 import { useState, useMemo } from 'react';
-import { 
-  MdSearch, 
-  MdFilterList, 
-  MdArrowUpward, 
-  MdArrowDownward 
+import {
+  MdSearch, MdClear, MdArrowUpward, MdArrowDownward, MdInbox
 } from 'react-icons/md';
 
+/* ─────────────────────────────────────────────
+   TIPOS
+───────────────────────────────────────────── */
 export interface Column<T> {
   key: string;
   label: string;
   sortable?: boolean;
-  filterable?: boolean;
-  render?: (item: T) => React.ReactNode;
   width?: string;
+  align?: 'left' | 'center' | 'right';
+  render?: (item: T, index: number) => React.ReactNode;
 }
 
 interface DataTableProps<T> {
@@ -23,259 +24,331 @@ interface DataTableProps<T> {
   actions?: (item: T) => React.ReactNode;
   onRowClick?: (item: T) => void;
   emptyMessage?: string;
+  emptyIcon?: React.ReactNode;
   loading?: boolean;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  rowKey?: (item: T, index: number) => string | number;
+  /** Slot para colocar botones/filtros extra encima de la tabla */
+  toolbar?: React.ReactNode;
+  /** Número de filas del skeleton loader */
+  skeletonRows?: number;
 }
 
-type SortDirection = 'asc' | 'desc' | null;
+type SortDir = 'asc' | 'desc' | null;
 
+/* ─────────────────────────────────────────────
+   COMPONENTE
+───────────────────────────────────────────── */
 export default function DataTable<T extends Record<string, unknown>>({
   data,
   columns,
   actions,
   onRowClick,
-  emptyMessage = 'No hay datos disponibles',
+  emptyMessage = 'No hay registros disponibles',
+  emptyIcon,
   loading = false,
+  searchable = true,
+  searchPlaceholder = 'Buscar...',
+  rowKey,
+  toolbar,
+  skeletonRows = 6,
 }: DataTableProps<T>) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortColumn, setSortColumn] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
-  const [filters, setFilters] = useState<Record<string, string>>({});
-  const [showFilters, setShowFilters] = useState(false);
+  const [search, setSearch]     = useState('');
+  const [sortCol, setSortCol]   = useState<string | null>(null);
+  const [sortDir, setSortDir]   = useState<SortDir>(null);
 
-  // Función para obtener valor anidado
-  const getNestedValue = (obj: T, path: string): unknown => {
-    return path.split('.').reduce((current: unknown, key: string) => {
-      if (current && typeof current === 'object' && key in current) {
-        return (current as Record<string, unknown>)[key];
-      }
-      return undefined;
-    }, obj);
-  };
+  /* ── helpers ── */
+  const getVal = (obj: T, path: string): unknown =>
+    path.split('.').reduce((cur: unknown, k) =>
+      cur && typeof cur === 'object' ? (cur as Record<string, unknown>)[k] : undefined
+    , obj);
 
-  // Función para ordenar
-  const handleSort = (columnKey: string) => {
-    if (sortColumn === columnKey) {
-      if (sortDirection === 'asc') {
-        setSortDirection('desc');
-      } else if (sortDirection === 'desc') {
-        setSortDirection(null);
-        setSortColumn(null);
-      }
-    } else {
-      setSortColumn(columnKey);
-      setSortDirection('asc');
+  const handleSort = (key: string) => {
+    if (sortCol === key) {
+      if (sortDir === 'asc')  { setSortDir('desc'); return; }
+      if (sortDir === 'desc') { setSortDir(null); setSortCol(null); return; }
     }
+    setSortCol(key);
+    setSortDir('asc');
   };
 
-  // Función para filtrar
-  const handleFilterChange = (columnKey: string, value: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      [columnKey]: value,
-    }));
-  };
+  /* ── datos procesados ── */
+  const rows = useMemo(() => {
+    let r = [...data];
 
-  // Datos procesados (filtrados, buscados y ordenados)
-  const processedData = useMemo(() => {
-    let result = [...data];
-
-    // Búsqueda global
-    if (searchTerm) {
-      result = result.filter((item) =>
-        columns.some((col) => {
-          const value = getNestedValue(item, col.key);
-          return String(value || '')
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase());
-        })
+    if (search.trim()) {
+      const t = search.toLowerCase();
+      r = r.filter(item =>
+        columns.some(col => String(getVal(item, col.key) ?? '').toLowerCase().includes(t))
       );
     }
 
-    // Filtros por columna
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value) {
-        result = result.filter((item) => {
-          const itemValue = getNestedValue(item, key);
-          return String(itemValue || '')
-            .toLowerCase()
-            .includes(value.toLowerCase());
-        });
-      }
-    });
-
-    // Ordenamiento
-    if (sortColumn && sortDirection) {
-      result.sort((a, b) => {
-        const aValue = getNestedValue(a, sortColumn);
-        const bValue = getNestedValue(b, sortColumn);
-
-        if (aValue === null || aValue === undefined) return 1;
-        if (bValue === null || bValue === undefined) return -1;
-
-        const aStr = String(aValue);
-        const bStr = String(bValue);
-
-        // Intentar comparar como números
-        const aNum = Number(aValue);
-        const bNum = Number(bValue);
-
-        if (!isNaN(aNum) && !isNaN(bNum)) {
-          return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
-        }
-
-        // Comparar como strings
-        if (sortDirection === 'asc') {
-          return aStr.localeCompare(bStr);
-        } else {
-          return bStr.localeCompare(aStr);
-        }
+    if (sortCol && sortDir) {
+      r.sort((a, b) => {
+        const av = getVal(a, sortCol);
+        const bv = getVal(b, sortCol);
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        const an = Number(av), bn = Number(bv);
+        if (!isNaN(an) && !isNaN(bn)) return sortDir === 'asc' ? an - bn : bn - an;
+        return sortDir === 'asc'
+          ? String(av).localeCompare(String(bv))
+          : String(bv).localeCompare(String(av));
       });
     }
 
-    return result;
-  }, [data, searchTerm, filters, sortColumn, sortDirection, columns]);
+    return r;
+  }, [data, search, sortCol, sortDir, columns]);
 
-  if (loading) {
-    return (
-      <div className="bg-white rounded-lg shadow p-8">
-        <div className="flex items-center justify-center">
-          <div className="text-lg text-gray-600">Cargando...</div>
-        </div>
-      </div>
-    );
-  }
+  const colSpan = columns.length + (actions ? 1 : 0);
+  const alignClass = (a?: string) =>
+    a === 'center' ? 'text-center' : a === 'right' ? 'text-right' : 'text-left';
 
+  /* ─────────────────────── RENDER ─────────────────────── */
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
-      {/* Barra de herramientas */}
-      <div className="p-4 border-b bg-gray-50 space-y-4">
-        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          {/* Buscador */}
-          <div className="relative flex-1 w-full md:max-w-md">
-            <MdSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Buscar..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
-            />
-          </div>
+    <div
+      className="rounded-2xl overflow-hidden flex flex-col"
+      style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0' }}
+    >
 
-          {/* Botón de filtros */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
-              showFilters
-                ? 'bg-blue-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            <MdFilterList size={20} />
-            Filtros
-          </button>
-        </div>
-
-        {/* Filtros por columna */}
-        {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
-            {columns
-              .filter((col) => col.filterable !== false)
-              .map((col) => (
-                <div key={col.key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {col.label}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={`Filtrar por ${col.label.toLowerCase()}`}
-                    value={filters[col.key] || ''}
-                    onChange={(e) => handleFilterChange(col.key, e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              ))}
-          </div>
-        )}
-
-        {/* Contador de resultados */}
-        <div className="text-sm text-gray-600">
-          Mostrando {processedData.length} de {data.length} registros
-        </div>
-      </div>
-
-      {/* Tabla */}
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                    col.sortable !== false ? 'cursor-pointer hover:bg-gray-100' : ''
-                  }`}
-                  style={{ width: col.width }}
-                  onClick={() => col.sortable !== false && handleSort(col.key)}
+      {/* ── TOOLBAR ── */}
+      {(searchable || toolbar) && (
+        <div
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4"
+          style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}
+        >
+          {/* Búsqueda */}
+          {searchable && (
+            <div className="relative w-full sm:max-w-xs">
+              <MdSearch
+                size={17}
+                className="absolute left-3 top-1/2 -translate-y-1/2"
+                style={{ color: '#94a3b8' }}
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={searchPlaceholder}
+                className="w-full pl-9 pr-8 py-2 rounded-lg text-sm outline-none transition-all"
+                style={{ border: '1.5px solid #e2e8f0', color: '#0f172a', backgroundColor: '#fff' }}
+                onFocus={e => {
+                  e.target.style.borderColor = '#1e4786';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(30,71,134,0.08)';
+                }}
+                onBlur={e => {
+                  e.target.style.borderColor = '#e2e8f0';
+                  e.target.style.boxShadow = 'none';
+                }}
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2"
                 >
-                  <div className="flex items-center gap-2">
-                    <span>{col.label}</span>
-                    {col.sortable !== false && sortColumn === col.key && (
-                      <span>
-                        {sortDirection === 'asc' ? (
-                          <MdArrowUpward size={16} className="text-blue-600" />
-                        ) : (
-                          <MdArrowDownward size={16} className="text-blue-600" />
-                        )}
-                      </span>
-                    )}
-                  </div>
-                </th>
-              ))}
+                  <MdClear size={16} style={{ color: '#94a3b8' }} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Slot externo (botones, filtros, etc.) */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {toolbar}
+            {/* Contador */}
+            {search && (
+              <span
+                className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                style={{ backgroundColor: 'rgba(34,196,161,0.1)', color: '#0f9b76' }}
+              >
+                {rows.length} de {data.length}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── TABLA ── */}
+      <div className="overflow-x-auto flex-1">
+        <table className="w-full">
+
+          {/* HEAD */}
+          <thead>
+            <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
+              {columns.map(col => {
+                const isSorted = sortCol === col.key;
+                return (
+                  <th
+                    key={col.key}
+                    style={{
+                      width: col.width,
+                      backgroundColor: '#fafafa',
+                      cursor: col.sortable !== false ? 'pointer' : 'default',
+                      userSelect: 'none',
+                    }}
+                    className={`px-5 py-3.5 text-xs font-bold uppercase tracking-wider ${alignClass(col.align)}`}
+                    onClick={() => col.sortable !== false && handleSort(col.key)}
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <span style={{ color: isSorted ? '#1e4786' : '#94a3b8' }}>{col.label}</span>
+                      {col.sortable !== false && (
+                        <span style={{ opacity: isSorted ? 1 : 0.3 }}>
+                          {isSorted && sortDir === 'desc'
+                            ? <MdArrowDownward size={13} style={{ color: '#22c4a1' }} />
+                            : <MdArrowUpward   size={13} style={{ color: isSorted ? '#22c4a1' : '#94a3b8' }} />
+                          }
+                        </span>
+                      )}
+                    </span>
+                  </th>
+                );
+              })}
               {actions && (
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th
+                  className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-right"
+                  style={{ backgroundColor: '#fafafa', color: '#94a3b8' }}
+                >
                   Acciones
                 </th>
               )}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {processedData.length === 0 ? (
+
+          {/* BODY */}
+          <tbody>
+
+            {/* Loading skeleton */}
+            {loading && Array.from({ length: skeletonRows }).map((_, i) => (
+              <tr key={`sk-${i}`} style={{ borderBottom: '1px solid #f8fafc' }}>
+                {Array.from({ length: colSpan }).map((__, j) => (
+                  <td key={j} className="px-5 py-4">
+                    <div
+                      className="rounded-md animate-pulse"
+                      style={{
+                        height: '14px',
+                        width: j === 0 ? '40%' : j === 1 ? '70%' : '55%',
+                        backgroundColor: '#f1f5f9',
+                      }}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+
+            {/* Empty */}
+            {!loading && rows.length === 0 && (
               <tr>
-                <td
-                  colSpan={columns.length + (actions ? 1 : 0)}
-                  className="px-6 py-8 text-center text-gray-500"
-                >
-                  {emptyMessage}
+                <td colSpan={colSpan} className="py-20 text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    {emptyIcon ?? <MdInbox size={44} style={{ color: '#e2e8f0' }} />}
+                    <p className="text-sm font-medium" style={{ color: '#94a3b8' }}>
+                      {emptyMessage}
+                    </p>
+                  </div>
                 </td>
               </tr>
-            ) : (
-              processedData.map((item, index) => (
-                <tr
-                  key={index}
-                  onClick={() => onRowClick?.(item)}
-                  className={`hover:bg-gray-50 ${onRowClick ? 'cursor-pointer' : ''}`}
-                >
-                  {columns.map((col) => (
-                    <td key={col.key} className="px-6 py-4 text-sm text-gray-900">
-                      {col.render
-                        ? col.render(item)
-                        : String(getNestedValue(item, col.key) ?? '')}
-                    </td>
-                  ))}
-                  {actions && (
-                    <td className="px-6 py-4 text-sm">
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        {actions(item)}
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))
             )}
+
+            {/* Filas */}
+            {!loading && rows.map((item, idx) => {
+              const key = rowKey ? rowKey(item, idx) : idx;
+              return (
+                <TableRow
+                  key={key}
+                  item={item}
+                  columns={columns}
+                  actions={actions}
+                  index={idx}
+                  onClick={onRowClick}
+                  getVal={getVal}
+                  alignClass={alignClass}
+                />
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      {/* ── FOOTER ── */}
+      {!loading && rows.length > 0 && (
+        <div
+          className="px-5 py-3 flex items-center justify-between"
+          style={{ borderTop: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}
+        >
+          <p className="text-xs" style={{ color: '#94a3b8' }}>
+            {rows.length === data.length
+              ? `${data.length} registro${data.length !== 1 ? 's' : ''}`
+              : `${rows.length} de ${data.length} registros`
+            }
+          </p>
+          {sortCol && (
+            <button
+              onClick={() => { setSortCol(null); setSortDir(null); }}
+              className="text-xs flex items-center gap-1 transition-colors"
+              style={{ color: '#94a3b8' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#1e4786')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#94a3b8')}
+            >
+              <MdClear size={13} /> Quitar orden
+            </button>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   FILA — componente separado para evitar re-renders
+───────────────────────────────────────────── */
+function TableRow<T extends Record<string, unknown>>({
+  item, columns, actions, index, onClick, getVal, alignClass,
+}: {
+  item: T;
+  columns: Column<T>[];
+  actions?: (item: T) => React.ReactNode;
+  index: number;
+  onClick?: (item: T) => void;
+  getVal: (obj: T, path: string) => unknown;
+  alignClass: (a?: string) => string;
+}) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <tr
+      style={{
+        borderBottom: '1px solid #f8fafc',
+        backgroundColor: hovered ? '#f8fbff' : 'transparent',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'background-color 0.1s',
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={() => onClick?.(item)}
+    >
+      {columns.map(col => (
+        <td
+          key={col.key}
+          className={`px-5 py-4 text-sm ${alignClass(col.align)}`}
+          style={{ color: '#0f172a' }}
+        >
+          {col.render
+            ? col.render(item, index)
+            : String(getVal(item, col.key) ?? '—')
+          }
+        </td>
+      ))}
+      {actions && (
+        <td
+          className="px-5 py-4 text-right"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-end gap-1">
+            {actions(item)}
+          </div>
+        </td>
+      )}
+    </tr>
   );
 }
