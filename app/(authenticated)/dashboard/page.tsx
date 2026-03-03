@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authService, UserData } from '../../services/auth.service';
 import { activoService, Activo } from '../../services/activo.service';
-import { cargaService } from '../../services/carga.service';
+import { Carga, cargaService } from '../../services/carga.service';
 import { responsableService } from '../../services/responsable.service';
-import { estadoService, Estado } from '../../services/estado.service';
-import { 
-  MdInventory, MdPeople, MdCheckCircle, MdWarning, 
+import { Estado } from '../../services/estado.service';
+import {
+  MdInventory, MdPeople, MdCheckCircle, MdWarning,
   MdTrendingUp, MdLocalShipping, MdArrowForward,
   MdDashboard, MdInsights
 } from 'react-icons/md';
@@ -25,6 +25,15 @@ interface DashboardStats {
   estadosMalos: number;
 }
 
+/* ─── Paleta data_business ─── */
+const c = {
+  brand:    '#1e4786',
+  accent:   '#22c4a1',
+  darkBg:   '#003366',
+  surface:  '#f8fafc',
+  textBold: '#0f172a',
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -36,19 +45,15 @@ export default function DashboardPage() {
     cargasPendientes: 0,
     estadosBuenos: 0,
     estadosRegulares: 0,
-    estadosMalos: 0
+    estadosMalos: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  // ✅ Función para convertir tipoUsu a texto legible
   const getTipoUsuarioTexto = (tipoUsu: string): string => {
     switch (tipoUsu) {
-      case '1':
-        return 'Administrador';
-      case '2':
-        return 'Auditor';
-      default:
-        return 'Usuario';
+      case '1': return 'Administrador';
+      case '2': return 'Auditor';
+      default:  return 'Usuario';
     }
   };
 
@@ -57,28 +62,25 @@ export default function DashboardPage() {
       const [activos, responsables, cargas] = await Promise.all([
         activoService.listarTodos(),
         responsableService.listarActivos(),
-        cargaService.listarTodas()
+        cargaService.listarTodas(),
       ]);
 
-      const activosAsignados = activos.filter(a => a.responsable).length;
-      const cargasPendientes = cargas.filter(c => c.estado !== 'T').length;
+      const activosAsignados  = activos.filter((a: Activo) => a.responsable).length;
+      const cargasPendientes = cargas.filter((c: Carga) => c.estado !== 'T').length;
 
-      const estadosBuenos = activos.filter((a: Activo) => {
-        const estado = a.estado as Estado | undefined;
-        const nombreEstado = estado?.nombreEstado?.toLowerCase() || '';
-        return nombreEstado.includes('bueno') || nombreEstado.includes('nuevo') || nombreEstado.includes('excelente');
+      const estadosBuenos   = activos.filter((a: Activo) => {
+        const nombre = (a.estado as Estado | undefined)?.nombreEstado?.toLowerCase() || '';
+        return nombre.includes('bueno') || nombre.includes('nuevo') || nombre.includes('excelente');
       }).length;
 
       const estadosRegulares = activos.filter((a: Activo) => {
-        const estado = a.estado as Estado | undefined;
-        const nombreEstado = estado?.nombreEstado?.toLowerCase() || '';
-        return nombreEstado.includes('regular') || nombreEstado.includes('medio');
+        const nombre = (a.estado as Estado | undefined)?.nombreEstado?.toLowerCase() || '';
+        return nombre.includes('regular') || nombre.includes('medio');
       }).length;
 
       const estadosMalos = activos.filter((a: Activo) => {
-        const estado = a.estado as Estado | undefined;
-        const nombreEstado = estado?.nombreEstado?.toLowerCase() || '';
-        return nombreEstado.includes('malo') || nombreEstado.includes('deteriorado');
+        const nombre = (a.estado as Estado | undefined)?.nombreEstado?.toLowerCase() || '';
+        return nombre.includes('malo') || nombre.includes('deteriorado');
       }).length;
 
       setStats({
@@ -89,7 +91,7 @@ export default function DashboardPage() {
         cargasPendientes,
         estadosBuenos,
         estadosRegulares,
-        estadosMalos
+        estadosMalos,
       });
     } catch (error) {
       console.error('Error cargando estadísticas:', error);
@@ -98,308 +100,327 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      if (!authService.isAuthenticated()) {
-        router.push('/login');
-        return;
-      }
-
-      const data = authService.getUserData();
-      setUserData(data);
-      
+      if (!authService.isAuthenticated()) { router.push('/login'); return; }
+      setUserData(authService.getUserData());
       await cargarEstadisticas();
       setIsLoading(false);
     };
-
     checkAuth();
   }, [router]);
 
   if (isLoading || !userData) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: c.surface }}>
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
-          <p className="text-slate-600 font-medium">Cargando dashboard...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: c.brand }} />
+          <p className="font-medium" style={{ color: c.brand }}>Cargando dashboard...</p>
         </div>
       </div>
     );
   }
 
-  const porcentajeAsignacion = stats.totalActivos > 0 
-    ? Math.round((stats.activosAsignados / stats.totalActivos) * 100) 
+  const porcentajeAsignacion = stats.totalActivos > 0
+    ? Math.round((stats.activosAsignados / stats.totalActivos) * 100)
     : 0;
 
+  const empresaActiva = userData.empresas?.find(
+    (e) => e.codEmpresa === userData.currentCompanyId
+  )?.razonSocial || 'N/A';
+
   return (
-    <div className="space-y-8 animate-fadeIn pb-10">
-      
-      {/* Header de Bienvenida */}
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-8 text-white shadow-xl">
-        <div className="flex items-center justify-between">
+    <div className="space-y-8 pb-10" style={{ backgroundColor: c.surface, minHeight: '100vh', padding: '2rem' }}>
+
+      {/* ── HEADER bienvenida ── */}
+      <div
+        className="rounded-2xl p-8 text-white shadow-xl relative overflow-hidden"
+        style={{ background: `linear-gradient(135deg, ${c.darkBg} 0%, ${c.brand} 100%)` }}
+      >
+        {/* Decoración accent top-right */}
+        <div
+          className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10"
+          style={{ background: c.accent, transform: 'translate(30%, -30%)' }}
+        />
+        <div
+          className="absolute bottom-0 right-32 w-32 h-32 rounded-full opacity-10"
+          style={{ background: c.accent, transform: 'translateY(50%)' }}
+        />
+
+        <div className="relative flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
-                <MdDashboard size={28} />
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="p-2 rounded-lg"
+                style={{ backgroundColor: 'rgba(34,196,161,0.2)', border: `1px solid rgba(34,196,161,0.3)` }}
+              >
+                <MdDashboard size={26} style={{ color: c.accent }} />
               </div>
               <div>
-                <p className="text-slate-300 text-sm font-medium">Bienvenido de vuelta</p>
-                <h1 className="text-3xl font-bold">{userData.nombreCompleto}</h1>
+                <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                  Bienvenido de vuelta
+                </p>
+                <h1 className="text-2xl font-bold text-white">{userData.nombreCompleto}</h1>
               </div>
             </div>
-            {/* ✅ Mostrar tipo de usuario legible */}
-            <div className="flex items-center gap-2 mt-2">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white/10 text-white border border-white/20">
+            <div className="flex items-center gap-2 mt-1">
+              <span
+                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold"
+                style={{ backgroundColor: 'rgba(34,196,161,0.2)', color: c.accent, border: `1px solid rgba(34,196,161,0.4)` }}
+              >
                 {getTipoUsuarioTexto(String(userData.tipoUsu))}
               </span>
-              <span className="text-slate-400 text-sm">•</span>
-              <span className="text-slate-400 text-sm">{userData.usuario}</span>
+              <span style={{ color: 'rgba(255,255,255,0.35)' }}>•</span>
+              <span className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>{userData.usuario}</span>
             </div>
           </div>
-          <div className="hidden md:block">
-            <div className="text-right">
-              <p className="text-slate-400 text-sm mb-1">Empresa Activa</p>
-              <p className="text-lg font-bold">
-                {userData.empresas?.find(e => e.codEmpresa === userData.currentCompanyId)?.razonSocial || 'N/A'}
-              </p>
-            </div>
+
+          <div className="hidden md:block text-right">
+            <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              Empresa Activa
+            </p>
+            <p className="text-base font-bold text-white">{empresaActiva}</p>
+            {/* Guión acento debajo del nombre */}
+            <div className="mt-1 ml-auto" style={{ width: '40px', height: '3px', backgroundColor: c.accent, borderRadius: '2px' }} />
           </div>
         </div>
       </div>
 
-      {/* Métricas Principales */}
+      {/* ── MÉTRICAS PRINCIPALES ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        
-        {/* Total Activos */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all group">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-slate-100 rounded-xl group-hover:bg-slate-900 transition-colors">
-              <MdInventory className="text-slate-700 group-hover:text-white transition-colors" size={28} />
-            </div>
-            <div className="text-right">
-              <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Total Activos</p>
-              <p className="text-3xl font-bold text-slate-900 mt-1">{stats.totalActivos}</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-600 font-medium">Inventario general</span>
-            <Link href="/dashboard/activos" className="text-slate-900 hover:underline flex items-center gap-1">
-              Ver <MdArrowForward size={14} />
-            </Link>
-          </div>
-        </div>
 
-        {/* Activos Asignados */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all group">
+        {/* Total Activos */}
+        <MetricCard
+          icon={<MdInventory size={26} />}
+          label="Total Activos"
+          value={stats.totalActivos}
+          sub="Inventario general"
+          href="/dashboard/activos"
+          iconBg={c.brand}
+        />
+
+        {/* Asignados */}
+        <div
+          className="rounded-2xl p-6 shadow-sm border"
+          style={{ backgroundColor: '#fff', borderColor: 'rgba(34,196,161,0.2)' }}
+        >
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-emerald-100 rounded-xl group-hover:bg-emerald-600 transition-colors">
-              <MdCheckCircle className="text-emerald-600 group-hover:text-white transition-colors" size={28} />
+            <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(34,196,161,0.12)' }}>
+              <MdCheckCircle size={26} style={{ color: c.accent }} />
             </div>
             <div className="text-right">
-              <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Asignados</p>
-              <p className="text-3xl font-bold text-slate-900 mt-1">{stats.activosAsignados}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Asignados</p>
+              <p className="text-3xl font-bold mt-1" style={{ color: c.textBold }}>{stats.activosAsignados}</p>
             </div>
           </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-600 font-medium">{porcentajeAsignacion}% del total</span>
-              <span className="text-emerald-600 font-bold">{stats.activosAsignados}/{stats.totalActivos}</span>
+            <div className="flex justify-between text-xs">
+              <span style={{ color: '#64748b' }}>{porcentajeAsignacion}% del total</span>
+              <span className="font-bold" style={{ color: c.accent }}>
+                {stats.activosAsignados}/{stats.totalActivos}
+              </span>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-              <div 
-                className="bg-emerald-600 h-full rounded-full transition-all duration-500"
-                style={{ width: `${porcentajeAsignacion}%` }}
+            <div className="w-full rounded-full h-1.5 overflow-hidden" style={{ backgroundColor: '#e2e8f0' }}>
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${porcentajeAsignacion}%`, backgroundColor: c.accent }}
               />
             </div>
           </div>
         </div>
 
         {/* Responsables */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all group">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-600 transition-colors">
-              <MdPeople className="text-blue-600 group-hover:text-white transition-colors" size={28} />
-            </div>
-            <div className="text-right">
-              <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Responsables</p>
-              <p className="text-3xl font-bold text-slate-900 mt-1">{stats.totalResponsables}</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-600 font-medium">Custodios activos</span>
-            <Link href="/dashboard/responsables" className="text-slate-900 hover:underline flex items-center gap-1">
-              Ver <MdArrowForward size={14} />
-            </Link>
-          </div>
-        </div>
+        <MetricCard
+          icon={<MdPeople size={26} />}
+          label="Responsables"
+          value={stats.totalResponsables}
+          sub="Custodios activos"
+          href="/dashboard/responsables"
+          iconBg={c.brand}
+        />
 
         {/* Cargas */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all group">
+        <div
+          className="rounded-2xl p-6 shadow-sm border"
+          style={{ backgroundColor: '#fff', borderColor: '#e2e8f0' }}
+        >
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-amber-100 rounded-xl group-hover:bg-amber-600 transition-colors">
-              <MdLocalShipping className="text-amber-600 group-hover:text-white transition-colors" size={28} />
+            <div className="p-3 rounded-xl" style={{ backgroundColor: `rgba(30,71,134,0.1)` }}>
+              <MdLocalShipping size={26} style={{ color: c.brand }} />
             </div>
             <div className="text-right">
-              <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Cargas</p>
-              <p className="text-3xl font-bold text-slate-900 mt-1">{stats.totalCargas}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Cargas</p>
+              <p className="text-3xl font-bold mt-1" style={{ color: c.textBold }}>{stats.totalCargas}</p>
             </div>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-600 font-medium">
-              {stats.cargasPendientes > 0 ? (
-                <span className="text-amber-600 font-bold">{stats.cargasPendientes} pendientes</span>
-              ) : (
-                <span className="text-emerald-600 font-bold">Todo al día</span>
-              )}
-            </span>
-            <Link href="/dashboard/cargas" className="text-slate-900 hover:underline flex items-center gap-1">
+            {stats.cargasPendientes > 0 ? (
+              <span className="font-bold" style={{ color: '#f59e0b' }}>
+                {stats.cargasPendientes} pendientes
+              </span>
+            ) : (
+              <span className="font-bold" style={{ color: c.accent }}>Todo al día ✓</span>
+            )}
+            <Link href="/dashboard/cargas" className="flex items-center gap-1 font-medium hover:underline" style={{ color: c.brand }}>
               Ver <MdArrowForward size={14} />
             </Link>
           </div>
         </div>
       </div>
 
-      {/* Análisis de Estados */}
+      {/* ── ANÁLISIS + ACCESOS ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Estado de Activos */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+
+        {/* Condición de Activos */}
+        <div
+          className="rounded-2xl p-6 shadow-sm border"
+          style={{ backgroundColor: '#fff', borderColor: '#e2e8f0' }}
+        >
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-slate-100 rounded-lg">
-              <MdInsights className="text-slate-700" size={24} />
+            <div className="p-2 rounded-lg" style={{ backgroundColor: `rgba(30,71,134,0.08)` }}>
+              <MdInsights size={22} style={{ color: c.brand }} />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-lg">Condición de Activos</h3>
-              <p className="text-slate-500 text-sm">Distribución por estado físico</p>
+              <h3 className="font-bold text-lg" style={{ color: c.textBold }}>Condición de Activos</h3>
+              <p className="text-sm" style={{ color: '#94a3b8' }}>Distribución por estado físico</p>
             </div>
           </div>
 
-          <div className="space-y-4">
-            {/* Buenos */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-emerald-600"></div>
-                  <span className="text-sm font-medium text-slate-700">Buen Estado</span>
-                </div>
-                <span className="text-sm font-bold text-slate-900">{stats.estadosBuenos}</span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                <div 
-                  className="bg-emerald-600 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${stats.totalActivos > 0 ? (stats.estadosBuenos / stats.totalActivos) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Regulares */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-amber-600"></div>
-                  <span className="text-sm font-medium text-slate-700">Estado Regular</span>
-                </div>
-                <span className="text-sm font-bold text-slate-900">{stats.estadosRegulares}</span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                <div 
-                  className="bg-amber-600 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${stats.totalActivos > 0 ? (stats.estadosRegulares / stats.totalActivos) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Malos */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-red-600"></div>
-                  <span className="text-sm font-medium text-slate-700">Mal Estado</span>
-                </div>
-                <span className="text-sm font-bold text-slate-900">{stats.estadosMalos}</span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                <div 
-                  className="bg-red-600 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${stats.totalActivos > 0 ? (stats.estadosMalos / stats.totalActivos) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
+          <div className="space-y-5">
+            <CondicionBar
+              label="Buen Estado"
+              value={stats.estadosBuenos}
+              total={stats.totalActivos}
+              color={c.accent}
+            />
+            <CondicionBar
+              label="Estado Regular"
+              value={stats.estadosRegulares}
+              total={stats.totalActivos}
+              color="#f59e0b"
+            />
+            <CondicionBar
+              label="Mal Estado"
+              value={stats.estadosMalos}
+              total={stats.totalActivos}
+              color="#ef4444"
+            />
           </div>
         </div>
 
         {/* Accesos Rápidos */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+        <div
+          className="rounded-2xl p-6 shadow-sm border"
+          style={{ backgroundColor: '#fff', borderColor: '#e2e8f0' }}
+        >
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-slate-100 rounded-lg">
-              <MdTrendingUp className="text-slate-700" size={24} />
+            <div className="p-2 rounded-lg" style={{ backgroundColor: `rgba(30,71,134,0.08)` }}>
+              <MdTrendingUp size={22} style={{ color: c.brand }} />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-lg">Accesos Rápidos</h3>
-              <p className="text-slate-500 text-sm">Navegación directa</p>
+              <h3 className="font-bold text-lg" style={{ color: c.textBold }}>Accesos Rápidos</h3>
+              <p className="text-sm" style={{ color: '#94a3b8' }}>Navegación directa</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3">
-            <Link 
-              href="/dashboard/activos" 
-              className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-900 rounded-xl transition-all group border border-slate-200"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white rounded-lg group-hover:bg-slate-800 transition-colors">
-                  <MdInventory className="text-slate-700 group-hover:text-white transition-colors" size={20} />
-                </div>
-                <span className="font-medium text-slate-900 group-hover:text-white transition-colors">
-                  Gestionar Activos
-                </span>
-              </div>
-              <MdArrowForward className="text-slate-400 group-hover:text-white transition-colors" size={20} />
-            </Link>
-
-            <Link 
-              href="/dashboard/cargas" 
-              className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-900 rounded-xl transition-all group border border-slate-200"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white rounded-lg group-hover:bg-slate-800 transition-colors">
-                  <MdLocalShipping className="text-slate-700 group-hover:text-white transition-colors" size={20} />
-                </div>
-                <span className="font-medium text-slate-900 group-hover:text-white transition-colors">
-                  Nueva Carga
-                </span>
-              </div>
-              <MdArrowForward className="text-slate-400 group-hover:text-white transition-colors" size={20} />
-            </Link>
-
-            <Link 
-              href="/dashboard/responsables" 
-              className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-900 rounded-xl transition-all group border border-slate-200"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white rounded-lg group-hover:bg-slate-800 transition-colors">
-                  <MdPeople className="text-slate-700 group-hover:text-white transition-colors" size={20} />
-                </div>
-                <span className="font-medium text-slate-900 group-hover:text-white transition-colors">
-                  Ver Responsables
-                </span>
-              </div>
-              <MdArrowForward className="text-slate-400 group-hover:text-white transition-colors" size={20} />
-            </Link>
-
-            <Link 
-              href="/dashboard/config-organizacional" 
-              className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-900 rounded-xl transition-all group border border-slate-200"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white rounded-lg group-hover:bg-slate-800 transition-colors">
-                  <MdWarning className="text-slate-700 group-hover:text-white transition-colors" size={20} />
-                </div>
-                <span className="font-medium text-slate-900 group-hover:text-white transition-colors">
-                  Configuración
-                </span>
-              </div>
-              <MdArrowForward className="text-slate-400 group-hover:text-white transition-colors" size={20} />
-            </Link>
+          <div className="grid grid-cols-1 gap-2">
+            {[
+              { href: '/dashboard/activos',               icon: <MdInventory size={20} />,     label: 'Gestionar Activos'   },
+              { href: '/dashboard/cargas',                icon: <MdLocalShipping size={20} />, label: 'Nueva Carga'         },
+              { href: '/dashboard/responsables',          icon: <MdPeople size={20} />,        label: 'Ver Responsables'    },
+              { href: '/dashboard/config-organizacional', icon: <MdWarning size={20} />,       label: 'Configuración'       },
+            ].map(({ href, icon, label }) => (
+              <QuickLink key={href} href={href} icon={icon} label={label} />
+            ))}
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─── Sub-componentes ─── */
+
+function MetricCard({
+  icon, label, value, sub, href, iconBg,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  sub: string;
+  href: string;
+  iconBg: string;
+}) {
+  return (
+    <div
+      className="rounded-2xl p-6 shadow-sm border"
+      style={{ backgroundColor: '#fff', borderColor: '#e2e8f0' }}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="p-3 rounded-xl text-white" style={{ backgroundColor: iconBg }}>
+          {icon}
+        </div>
+        <div className="text-right">
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>{label}</p>
+          <p className="text-3xl font-bold mt-1" style={{ color: '#0f172a' }}>{value}</p>
+        </div>
+      </div>
+      <div className="flex items-center justify-between text-xs">
+        <span style={{ color: '#64748b' }}>{sub}</span>
+        <Link href={href} className="flex items-center gap-1 font-medium hover:underline" style={{ color: '#1e4786' }}>
+          Ver <MdArrowForward size={14} />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function CondicionBar({ label, value, total, color }: {
+  label: string; value: number; total: number; color: string;
+}) {
+  const pct = total > 0 ? (value / total) * 100 : 0;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+          <span className="text-sm font-medium" style={{ color: '#334155' }}>{label}</span>
+        </div>
+        <span className="text-sm font-bold" style={{ color: '#0f172a' }}>{value}</span>
+      </div>
+      <div className="w-full rounded-full h-1.5 overflow-hidden" style={{ backgroundColor: '#f1f5f9' }}>
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${pct}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function QuickLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between p-3.5 rounded-xl transition-all duration-150 group border"
+      style={{ backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLAnchorElement).style.backgroundColor = '#1e4786';
+        (e.currentTarget as HTMLAnchorElement).style.borderColor = '#1e4786';
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLAnchorElement).style.backgroundColor = '#f8fafc';
+        (e.currentTarget as HTMLAnchorElement).style.borderColor = '#e2e8f0';
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className="p-1.5 rounded-lg transition-all duration-150"
+          style={{ backgroundColor: 'rgba(30,71,134,0.1)', color: '#1e4786' }}
+        >
+          {icon}
+        </div>
+        <span className="font-medium text-sm" style={{ color: '#1e4786' }}>{label}</span>
+      </div>
+      <MdArrowForward size={18} style={{ color: '#94a3b8' }} />
+    </Link>
   );
 }
