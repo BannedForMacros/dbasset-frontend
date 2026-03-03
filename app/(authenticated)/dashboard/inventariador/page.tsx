@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { AxiosError } from 'axios';
 import { inventariadorService, Inventariador } from '../../../services/inventariador.service';
 import { 
-  MdAdd, MdEdit, MdDelete, MdPerson, MdSearch, 
+  MdAdd, MdEdit, MdDelete, MdSearch, 
   MdClose, MdSave, MdAssignmentInd, MdEmail, 
   MdPhone, MdBadge, MdLock, MdVisibility, MdVisibilityOff
 } from 'react-icons/md';
@@ -30,7 +30,7 @@ export default function InventariadoresPage() {
 
   // --- FORMULARIO ---
   const initialFormState = {
-    nombreInventariador: '',
+    nombre: '',
     dni: '',
     telefono: '',
     email: '',
@@ -62,7 +62,7 @@ export default function InventariadoresPage() {
     
     const term = searchTerm.toLowerCase();
     return inventariadores.filter(inv => 
-      inv.nombreInventariador.toLowerCase().includes(term) ||
+      inv.nombre.toLowerCase().includes(term) ||
       (inv.dni || '').toLowerCase().includes(term) ||
       (inv.codInterno || '').toLowerCase().includes(term) ||
       (inv.email || '').toLowerCase().includes(term)
@@ -73,14 +73,14 @@ export default function InventariadoresPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.nombreInventariador.trim()) {
+    if (!formData.nombre.trim()) {
       alert('El nombre es obligatorio');
       return;
     }
 
     // ✅ No enviamos password al backend
     const payload = {
-      nombreInventariador: formData.nombreInventariador,
+      nombre: formData.nombre,
       dni: formData.dni || undefined,
       telefono: formData.telefono || undefined,
       email: formData.email || undefined,
@@ -110,7 +110,7 @@ export default function InventariadoresPage() {
   const handleEdit = (inv: Inventariador) => {
     setEditingId(inv.codInventariador || null);
     setFormData({
-      nombreInventariador: inv.nombreInventariador,
+      nombre: inv.nombre,
       dni: inv.dni || '',
       telefono: inv.telefono || '',
       email: inv.email || '',
@@ -209,9 +209,9 @@ export default function InventariadoresPage() {
                   <tr key={inv.codInventariador} className="hover:bg-green-50/30 transition">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <UserAvatar name={inv.nombreInventariador} />
+                        <UserAvatar name={inv.nombre} />
                         <div>
-                          <p className="font-bold text-gray-900">{inv.nombreInventariador}</p>
+                          <p className="font-bold text-gray-900">{inv.nombre}</p>
                           <p className="text-xs text-gray-500 flex items-center gap-1">
                             <MdAssignmentInd size={12}/> Inventariador
                           </p>
@@ -305,8 +305,8 @@ export default function InventariadoresPage() {
                 <input 
                   type="text" 
                   required 
-                  value={formData.nombreInventariador} 
-                  onChange={e => setFormData({...formData, nombreInventariador: e.target.value})}
+                  value={formData.nombre} 
+                  onChange={e => setFormData({...formData, nombre: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
                   placeholder="Ej: Juan Pérez López"
                 />

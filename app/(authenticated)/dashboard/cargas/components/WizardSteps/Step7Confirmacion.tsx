@@ -9,7 +9,7 @@ interface Assignment {
   codResponsable?: number;
   nombreResponsable?: string;
   codInventariador?: number;
-  nombreInventariador?: string;
+  nombre?: string;
 }
 
 interface Step7ConfirmacionProps {
@@ -188,7 +188,7 @@ export default function Step7Confirmacion({
                       {assignment.fin - assignment.inicio + 1} ítems
                     </td>
                     <td className="px-4 py-3 font-bold text-gray-800">
-                      {assignment.nombreInventariador}
+                      {assignment.nombre}
                     </td>
                   </tr>
                 ))}

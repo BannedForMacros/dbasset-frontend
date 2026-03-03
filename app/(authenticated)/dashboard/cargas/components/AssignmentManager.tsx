@@ -1,30 +1,20 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 'use client';
 
 import { useState } from 'react';
-import { MdAdd, MdDelete, MdCheckCircle, MdLightbulb, MdEdit, MdFilterList, MdPerson } from 'react-icons/md';
-import PersonSelector from './PersonSelector';
+import { MdAdd, MdDelete, MdPerson, MdAutoFixHigh, MdTouchApp, MdInput, MdCheckCircle, MdWarning } from 'react-icons/md';
 
-// ✅ Interfaces separadas y bien tipadas
-interface ResponsableAssignment {
+interface Assignment {
   inicio: number;
   fin: number;
   codResponsable?: number;
   nombreResponsable?: string;
 }
 
-interface InventariadorAssignment {
-  inicio: number;
-  fin: number;
-  codInventariador?: number;
-  nombreInventariador?: string;
-}
-
-type Assignment = ResponsableAssignment | InventariadorAssignment;
-
-interface Person {
-  id: number;
-  name: string;
-  subtitle?: string;
+interface Person { 
+  id: number; 
+  name: string; 
+  subtitle?: string; 
 }
 
 interface AssignmentManagerProps {
@@ -42,455 +32,270 @@ export default function AssignmentManager({
   persons,
   assignments,
   onAssignmentsChange,
-  selectedRows,
-  title,
-  mode
+  selectedRows
 }: AssignmentManagerProps) {
-  const [strategy, setStrategy] = useState<'equal' | 'manual' | 'selected'>('selected');
-  const [selectedPersons, setSelectedPersons] = useState<Set<number>>(new Set());
-  const [rangeStart, setRangeStart] = useState(1);
-  const [rangeEnd, setRangeEnd] = useState(totalItems);
+  const [strategy, setStrategy] = useState<'selected' | 'manual' | 'equal'>(
+    selectedRows.size > 0 ? 'selected' : 'manual'
+  );
+  
+  const [range, setRange] = useState({ start: 1, end: totalItems });
   const [selectedPerson, setSelectedPerson] = useState('');
+  const [personsForEqual, setPersonsForEqual] = useState<Set<number>>(new Set());
 
-  // Calcular filas asignadas
-  const assignedRows = new Set<number>();
-  assignments.forEach(assignment => {
-    for (let i = assignment.inicio; i <= assignment.fin; i++) {
-      assignedRows.add(i);
-    }
-  });
+  const formatRange = (i: number, f: number) => i === f ? `Fila ${i}` : `Filas ${i} al ${f}`;
 
-  const unassignedCount = totalItems - assignedRows.size;
-
-  const formatRange = (inicio: number, fin: number): string => {
-    return inicio === fin ? `#${inicio}` : `#${inicio}-${fin}`;
-  };
-
-  // ✅ Helper para obtener el nombre según el modo
-  const getPersonName = (assignment: Assignment): string => {
-    if (mode === 'responsable') {
-      return (assignment as ResponsableAssignment).nombreResponsable || '';
-    } else {
-      return (assignment as InventariadorAssignment).nombreInventariador || '';
-    }
-  };
-
-  // MODO 1: Distribución Equitativa
-  const handleEqualDistribution = () => {
-    if (selectedPersons.size === 0) {
-      alert('⚠️ Seleccione al menos una persona');
-      return;
-    }
-
-    const unassignedIndices = Array.from({ length: totalItems }, (_, i) => i + 1)
-      .filter(idx => !assignedRows.has(idx));
-
-    if (unassignedIndices.length === 0) {
-      alert('⚠️ No hay ítems pendientes');
-      return;
-    }
-
-    const selectedArray = Array.from(selectedPersons);
-    const itemsPerPerson = Math.floor(unassignedIndices.length / selectedArray.length);
-    const remainder = unassignedIndices.length % selectedArray.length;
-
-    const newAssignments: Assignment[] = [];
-    let currentIndex = 0;
-
-    selectedArray.forEach((personId, idx) => {
-      const person = persons.find(p => p.id === personId)!;
-      const count = itemsPerPerson + (idx < remainder ? 1 : 0);
-      
-      const assignedIndices = unassignedIndices.slice(currentIndex, currentIndex + count);
-      
-      if (assignedIndices.length > 0) {
-        let rangeStart = assignedIndices[0];
-        let rangeEnd = assignedIndices[0];
-        
-        for (let i = 1; i < assignedIndices.length; i++) {
-          if (assignedIndices[i] === rangeEnd + 1) {
-            rangeEnd = assignedIndices[i];
-          } else {
-            if (mode === 'responsable') {
-              newAssignments.push({
-                inicio: rangeStart,
-                fin: rangeEnd,
-                codResponsable: personId,
-                nombreResponsable: person.name
-              });
-            } else {
-              newAssignments.push({
-                inicio: rangeStart,
-                fin: rangeEnd,
-                codInventariador: personId,
-                nombreInventariador: person.name
-              });
-            }
-            rangeStart = assignedIndices[i];
-            rangeEnd = assignedIndices[i];
-          }
-        }
-        
-        if (mode === 'responsable') {
-          newAssignments.push({
-            inicio: rangeStart,
-            fin: rangeEnd,
-            codResponsable: personId,
-            nombreResponsable: person.name
-          });
-        } else {
-          newAssignments.push({
-            inicio: rangeStart,
-            fin: rangeEnd,
-            codInventariador: personId,
-            nombreInventariador: person.name
-          });
-        }
-      }
-
-      currentIndex += count;
-    });
-
-    onAssignmentsChange([...assignments, ...newAssignments]);
-    setSelectedPersons(new Set());
-  };
-
-  // MODO 2: Rango Manual
-  const handleManualRange = () => {
-    if (!selectedPerson) {
-      alert('⚠️ Seleccione una persona');
-      return;
-    }
-
+  const handleManualAdd = () => {
+    if (!selectedPerson) return;
     const person = persons.find(p => p.id === Number(selectedPerson))!;
-    
-    const newAssignment: Assignment = mode === 'responsable' 
-      ? {
-          inicio: rangeStart,
-          fin: rangeEnd,
-          codResponsable: person.id,
-          nombreResponsable: person.name
-        }
-      : {
-          inicio: rangeStart,
-          fin: rangeEnd,
-          codInventariador: person.id,
-          nombreInventariador: person.name
-        };
-
-    onAssignmentsChange([...assignments, newAssignment]);
-    
-    // Buscar siguiente rango disponible
-    let nextStart = rangeEnd + 1;
-    while (nextStart <= totalItems && assignedRows.has(nextStart)) {
-      nextStart++;
-    }
-    if (nextStart <= totalItems) {
-      setRangeStart(nextStart);
-      setRangeEnd(totalItems);
-    }
+    onAssignmentsChange([...assignments, {
+      inicio: range.start,
+      fin: range.end,
+      codResponsable: person.id,
+      nombreResponsable: person.name
+    }]);
     setSelectedPerson('');
   };
 
-  // MODO 3: Filas Seleccionadas
-  const handleSelectedRows = (personId: number) => {
-    if (selectedRows.size === 0) {
-      alert('⚠️ No hay filas seleccionadas');
+  const handleQuickAssign = (personId: number) => {
+    if (selectedRows.size === 0) return;
+    const person = persons.find(p => p.id === personId)!;
+    const sorted = Array.from(selectedRows).sort((a, b) => a - b).map(i => i + 1);
+    
+    const newRanges: Assignment[] = [];
+    let s = sorted[0], e = sorted[0];
+
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i] === e + 1) e = sorted[i];
+      else {
+        newRanges.push({ inicio: s, fin: e, codResponsable: personId, nombreResponsable: person.name });
+        s = sorted[i]; e = sorted[i];
+      }
+    }
+    newRanges.push({ inicio: s, fin: e, codResponsable: personId, nombreResponsable: person.name });
+    onAssignmentsChange([...assignments, ...newRanges]);
+  };
+
+  const handleEqualDistribution = () => {
+    if (personsForEqual.size === 0) return;
+    
+    const assignedIds = new Set<number>();
+    assignments.forEach(a => { for (let i = a.inicio; i <= a.fin; i++) assignedIds.add(i); });
+    const unassigned = Array.from({ length: totalItems }, (_, i) => i + 1).filter(idx => !assignedIds.has(idx));
+    
+    if (unassigned.length === 0) {
+      alert("¡Ya no hay filas pendientes por asignar!");
       return;
     }
 
-    const person = persons.find(p => p.id === personId)!;
-    const sortedIndices = Array.from(selectedRows).sort((a, b) => a - b).map(i => i + 1);
+    const selectedArray = Array.from(personsForEqual);
+    const perPerson = Math.floor(unassigned.length / selectedArray.length);
+    const remainder = unassigned.length % selectedArray.length;
 
-    // Crear rangos consecutivos
-    const ranges: { inicio: number; fin: number }[] = [];
-    let rangeStartIdx = sortedIndices[0];
-    let rangeEndIdx = sortedIndices[0];
+    const newAsigs: Assignment[] = [];
+    let currentIdx = 0;
 
-    for (let i = 1; i < sortedIndices.length; i++) {
-      if (sortedIndices[i] === rangeEndIdx + 1) {
-        rangeEndIdx = sortedIndices[i];
-      } else {
-        ranges.push({ inicio: rangeStartIdx, fin: rangeEndIdx });
-        rangeStartIdx = sortedIndices[i];
-        rangeEndIdx = sortedIndices[i];
+    selectedArray.forEach((personId, idx) => {
+      const person = persons.find(p => p.id === personId)!;
+      const count = perPerson + (idx < remainder ? 1 : 0);
+      const indices = unassigned.slice(currentIdx, currentIdx + count);
+      
+      if (indices.length > 0) {
+        let s = indices[0], last = indices[0];
+        const push = (start: number, end: number) => {
+          newAsigs.push({ inicio: start, fin: end, codResponsable: personId, nombreResponsable: person.name });
+        };
+        for (let i = 1; i < indices.length; i++) {
+          if (indices[i] === last + 1) last = indices[i];
+          else { push(s, last); s = indices[i]; last = indices[i]; }
+        }
+        push(s, last);
       }
-    }
-    ranges.push({ inicio: rangeStartIdx, fin: rangeEndIdx });
+      currentIdx += count;
+    });
 
-    const newAssignments: Assignment[] = ranges.map(range => 
-      mode === 'responsable'
-        ? {
-            inicio: range.inicio,
-            fin: range.fin,
-            codResponsable: personId,
-            nombreResponsable: person.name
-          }
-        : {
-            inicio: range.inicio,
-            fin: range.fin,
-            codInventariador: personId,
-            nombreInventariador: person.name
-          }
-    );
-
-    onAssignmentsChange([...assignments, ...newAssignments]);
-  };
-
-  const handleDeleteAssignment = (index: number) => {
-    if (confirm('¿Eliminar esta asignación?')) {
-      onAssignmentsChange(assignments.filter((_, i) => i !== index));
-    }
+    onAssignmentsChange([...assignments, ...newAsigs]);
+    setPersonsForEqual(new Set()); 
   };
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+    <div className="bg-gray-100 rounded-xl p-4 border-2 border-gray-300 shadow-md flex flex-col gap-4">
+      
+      {/* 1. BOTONES DE ESTRATEGIA (¡Ahora sí parecen botones siempre!) */}
+      <div className="flex flex-col sm:flex-row gap-3 bg-gray-200 p-2 rounded-xl border border-gray-300">
+        <button
+          onClick={() => setStrategy('selected')}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-all text-sm border-2 ${
+            strategy === 'selected' 
+              ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-[1.02]' 
+              : 'bg-white text-gray-700 border-gray-300 shadow-sm hover:border-gray-400 hover:bg-gray-50'
+          }`}
+        >
+          <MdTouchApp size={20} /> Asignar lo Seleccionado ({selectedRows.size})
+        </button>
 
-      {/* Estado Global */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-          <p className="text-xs font-bold text-blue-600 mb-1">TOTAL</p>
-          <p className="text-2xl font-bold text-gray-800">{totalItems}</p>
-        </div>
-        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-          <p className="text-xs font-bold text-green-600 mb-1">ASIGNADOS</p>
-          <p className="text-2xl font-bold text-gray-800">{assignedRows.size}</p>
-        </div>
-        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <p className="text-xs font-bold text-gray-600 mb-1">PENDIENTES</p>
-          <p className="text-2xl font-bold text-gray-800">{unassignedCount}</p>
-        </div>
+        <button
+          onClick={() => setStrategy('manual')}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-all text-sm border-2 ${
+            strategy === 'manual' 
+              ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-[1.02]' 
+              : 'bg-white text-gray-700 border-gray-300 shadow-sm hover:border-gray-400 hover:bg-gray-50'
+          }`}
+        >
+          <MdInput size={20} /> Asignar por Rango (1 al 10)
+        </button>
+
+        <button
+          onClick={() => setStrategy('equal')}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-all text-sm border-2 ${
+            strategy === 'equal' 
+              ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-[1.02]' 
+              : 'bg-white text-gray-700 border-gray-300 shadow-sm hover:border-gray-400 hover:bg-gray-50'
+          }`}
+        >
+          <MdAutoFixHigh size={20} /> Repartir por igual
+        </button>
       </div>
 
-      {/* Barra de Progreso */}
-      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <div className="flex justify-between text-xs font-bold text-gray-600 mb-2">
-          <span>Progreso</span>
-          <span>{Math.round((assignedRows.size / totalItems) * 100)}%</span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-3">
-          <div
-            className="bg-blue-600 h-3 rounded-full transition-all duration-500"
-            style={{ width: `${(assignedRows.size / totalItems) * 100}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Tabla de Asignaciones */}
-      {assignments.length > 0 && (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-gray-50 px-4 py-3 border-b flex items-center gap-2">
-            <MdCheckCircle className="text-blue-600" size={20} />
-            <h4 className="font-bold text-gray-800">Asignaciones Realizadas</h4>
-            <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">
-              {assignments.length}
-            </span>
-          </div>
-          <div className="overflow-x-auto max-h-80">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b sticky top-0">
-                <tr>
-                  <th className="px-4 py-3 text-left font-bold text-gray-600">Rango</th>
-                  <th className="px-4 py-3 text-left font-bold text-gray-600">Cantidad</th>
-                  <th className="px-4 py-3 text-left font-bold text-gray-600">Persona</th>
-                  <th className="px-4 py-3 text-right font-bold text-gray-600">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {assignments.map((assignment, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50 transition">
-                    <td className="px-4 py-3 font-mono text-blue-600 font-bold">
-                      {formatRange(assignment.inicio, assignment.fin)}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {assignment.fin - assignment.inicio + 1} ítems
-                    </td>
-                    <td className="px-4 py-3 font-bold text-gray-800">
-                      {getPersonName(assignment)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleDeleteAssignment(idx)}
-                        className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded transition"
-                      >
-                        <MdDelete size={20} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Selector de Estrategia */}
-      <div className="border-t-2 border-gray-200 pt-6">
-        <h4 className="font-bold text-lg text-gray-800 mb-4">Nueva Asignación</h4>
-
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <button
-            onClick={() => setStrategy('equal')}
-            disabled={unassignedCount === 0}
-            className={`p-4 rounded-lg border-2 transition flex flex-col items-center gap-2 ${
-              strategy === 'equal'
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-200 bg-white hover:border-blue-200 disabled:opacity-40'
-            }`}
-          >
-            <MdLightbulb size={24} className={strategy === 'equal' ? 'text-blue-600' : 'text-gray-400'} />
-            <span className={`font-bold text-sm ${strategy === 'equal' ? 'text-blue-700' : 'text-gray-600'}`}>
-              Distribución Equitativa
-            </span>
-          </button>
-
-          <button
-            onClick={() => setStrategy('manual')}
-            disabled={unassignedCount === 0}
-            className={`p-4 rounded-lg border-2 transition flex flex-col items-center gap-2 ${
-              strategy === 'manual'
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-200 bg-white hover:border-blue-200 disabled:opacity-40'
-            }`}
-          >
-            <MdEdit size={24} className={strategy === 'manual' ? 'text-blue-600' : 'text-gray-400'} />
-            <span className={`font-bold text-sm ${strategy === 'manual' ? 'text-blue-700' : 'text-gray-600'}`}>
-              Rango Manual
-            </span>
-          </button>
-
-          <button
-            onClick={() => setStrategy('selected')}
-            disabled={selectedRows.size === 0}
-            className={`p-4 rounded-lg border-2 transition flex flex-col items-center gap-2 ${
-              strategy === 'selected'
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-200 bg-white hover:border-blue-200 disabled:opacity-40'
-            }`}
-          >
-            <MdFilterList size={24} className={strategy === 'selected' ? 'text-blue-600' : 'text-gray-400'} />
-            <span className={`font-bold text-sm ${strategy === 'selected' ? 'text-blue-700' : 'text-gray-600'}`}>
-              Filas Seleccionadas
-            </span>
-            {selectedRows.size > 0 && (
-              <span className="text-xs text-blue-600">{selectedRows.size} marcadas</span>
-            )}
-          </button>
-        </div>
-
-        {/* MODO 1: Equitativa */}
-        {strategy === 'equal' && (
-          <div className="space-y-3">
-            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-sm text-blue-800">
-              Seleccione personas para dividir automáticamente los {unassignedCount} ítems pendientes
-            </div>
-
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {persons.map(person => (
-                <div
-                  key={person.id}
-                  onClick={() => {
-                    const newSet = new Set(selectedPersons);
-                    if (newSet.has(person.id)) newSet.delete(person.id);
-                    else newSet.add(person.id);
-                    setSelectedPersons(newSet);
-                  }}
-                  className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition ${
-                    selectedPersons.has(person.id)
-                      ? 'bg-blue-50 border-blue-300'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedPersons.has(person.id)}
-                    onChange={() => {}}
-                    className="w-5 h-5 rounded"
-                  />
-                  <MdPerson className="text-blue-600" size={24} />
-                  <div className="flex-1">
-                    <p className="font-bold text-gray-800">{person.name}</p>
-                    {person.subtitle && <p className="text-xs text-gray-500">{person.subtitle}</p>}
-                  </div>
+      {/* 2. ÁREA DE EJECUCIÓN */}
+      <div className="bg-white rounded-lg p-5 border border-gray-300 min-h-[100px] flex items-center">
+        
+        {strategy === 'selected' && (
+          <div className="w-full">
+            {selectedRows.size === 0 ? (
+              <div className="text-center p-4 bg-yellow-50 border-2 border-yellow-200 rounded-lg shadow-sm">
+                <p className="text-yellow-800 font-bold flex items-center justify-center gap-2 text-sm sm:text-base">
+                  <MdWarning size={24} /> Primero debes marcar una o más casillas en la tabla de arriba.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm font-bold text-gray-700 mb-3">¿A quién le asignamos estas {selectedRows.size} filas?</p>
+                <div className="flex flex-wrap gap-3">
+                  {persons.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => handleQuickAssign(p.id)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-50 border-2 border-blue-300 rounded-lg text-blue-800 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm font-bold"
+                    >
+                      <MdPerson size={20} /> {p.name}
+                    </button>
+                  ))}
+                  {persons.length === 0 && <p className="text-gray-500 italic">No hay responsables agregados.</p>}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+          </div>
+        )}
 
-            <button
+        {strategy === 'manual' && (
+          <div className="w-full">
+            <p className="text-sm font-bold text-gray-700 mb-3">Escribe desde qué número hasta qué número quieres asignar:</p>
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="flex-1 min-w-[200px]">
+                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">1. Elige a la persona</label>
+                <select 
+                  value={selectedPerson} 
+                  onChange={e => setSelectedPerson(e.target.value)}
+                  className="w-full p-3 bg-white border-2 border-gray-300 rounded-lg text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                >
+                  <option value="">Selecciona aquí...</option>
+                  {persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="w-24">
+                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block text-center">Desde fila</label>
+                <input type="number" value={range.start} onChange={e => setRange({...range, start: +e.target.value})} className="w-full p-3 border-2 border-gray-300 rounded-lg text-center font-bold text-gray-700 focus:border-blue-600 outline-none" />
+              </div>
+              <div className="w-24">
+                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block text-center">Hasta fila</label>
+                <input type="number" value={range.end} onChange={e => setRange({...range, end: +e.target.value})} className="w-full p-3 border-2 border-gray-300 rounded-lg text-center font-bold text-gray-700 focus:border-blue-600 outline-none" />
+              </div>
+              <button 
+                onClick={handleManualAdd}
+                disabled={!selectedPerson}
+                className="p-3 bg-blue-600 text-white rounded-lg border-2 border-blue-700 hover:bg-blue-700 disabled:bg-gray-300 disabled:border-gray-400 disabled:text-gray-500 transition-all font-bold flex items-center gap-2"
+              >
+                <MdAdd size={24} /> Asignar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {strategy === 'equal' && (
+          <div className="w-full">
+            <p className="text-sm font-bold text-gray-700 mb-3">Selecciona a 2 o más personas para repartir los ítems que faltan:</p>
+            <div className="flex flex-wrap gap-3 mb-4">
+              {persons.map(p => {
+                const isSelected = personsForEqual.has(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      const newSet = new Set(personsForEqual);
+                      isSelected ? newSet.delete(p.id) : newSet.add(p.id);
+                      setPersonsForEqual(newSet);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 border-2 rounded-lg font-bold transition-all shadow-sm ${
+                      isSelected 
+                        ? 'bg-blue-100 border-blue-600 text-blue-800' 
+                        : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded flex items-center justify-center border ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-400'}`}>
+                      {isSelected && <MdCheckCircle size={16} />}
+                    </div>
+                    {p.name}
+                  </button>
+                )
+              })}
+            </div>
+            
+            <button 
               onClick={handleEqualDistribution}
-              disabled={selectedPersons.size === 0}
-              className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold disabled:opacity-50 flex items-center justify-center gap-2"
+              disabled={personsForEqual.size < 2}
+              className="w-full p-3 bg-green-600 text-white rounded-lg border-2 border-green-700 hover:bg-green-700 disabled:bg-gray-300 disabled:border-gray-400 disabled:text-gray-500 transition-all font-bold text-lg flex justify-center items-center gap-2 shadow-md"
             >
-              <MdAdd size={20} />
-              Distribuir Equitativamente
+              <MdAutoFixHigh size={24} /> 
+              {personsForEqual.size < 2 
+                ? 'Selecciona al menos 2 personas arriba' 
+                : `Repartir entre estas ${personsForEqual.size} personas`}
             </button>
           </div>
         )}
+      </div>
 
-        {/* MODO 2: Manual */}
-        {strategy === 'manual' && (
-          <div className="bg-blue-50 p-4 rounded-lg space-y-4">
-            <div className="grid grid-cols-12 gap-3 items-end">
-              <div className="col-span-2">
-                <label className="text-xs font-bold text-gray-600 mb-1 block">Desde</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={totalItems}
-                  value={rangeStart}
-                  onChange={(e) => setRangeStart(Number(e.target.value))}
-                  className="w-full p-2 text-center font-bold bg-white rounded-lg border-2 border-blue-300"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className="text-xs font-bold text-gray-600 mb-1 block">Hasta</label>
-                <input
-                  type="number"
-                  min={rangeStart}
-                  max={totalItems}
-                  value={rangeEnd}
-                  onChange={(e) => setRangeEnd(Number(e.target.value))}
-                  className="w-full p-2 text-center font-bold bg-white rounded-lg border-2 border-blue-300"
-                />
-              </div>
-              <div className="col-span-6">
-                <label className="text-xs font-bold text-gray-600 mb-1 block">Persona</label>
-                <select
-                  value={selectedPerson}
-                  onChange={(e) => setSelectedPerson(e.target.value)}
-                  className="w-full p-2 bg-white rounded-lg border border-gray-300"
+      {/* 3. HISTORIAL DE ASIGNACIONES */}
+      {assignments.length > 0 && (
+        <div className="bg-white rounded-lg p-4 border border-gray-300 shadow-sm">
+          <div className="flex justify-between items-center mb-3">
+            <p className="text-sm font-black text-gray-800 uppercase">Lo que has asignado hasta ahora:</p>
+            <button 
+              onClick={() => onAssignmentsChange([])} 
+              className="text-xs text-red-600 hover:underline font-bold"
+            >
+              Borrar Todo
+            </button>
+          </div>
+          
+          <div className="flex flex-wrap gap-2 max-h-[120px] overflow-y-auto">
+            {assignments.map((a, idx) => (
+              <div key={idx} className="flex items-center justify-between gap-3 px-3 py-2 bg-gray-50 border-2 border-gray-200 rounded-lg min-w-[200px]">
+                <div>
+                  <p className="text-xs font-black text-blue-700">{formatRange(a.inicio, a.fin)}</p>
+                  <p className="text-sm font-bold text-gray-800 truncate max-w-[150px]">{a.nombreResponsable}</p>
+                </div>
+                <button 
+                  onClick={() => onAssignmentsChange(assignments.filter((_, i) => i !== idx))}
+                  className="p-1.5 bg-white border border-red-200 text-red-500 hover:bg-red-500 hover:text-white rounded transition-colors"
+                  title="Eliminar asignación"
                 >
-                  <option value="">-- Seleccionar --</option>
-                  {persons.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} {p.subtitle ? `(${p.subtitle})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-span-2">
-                <button
-                  onClick={handleManualRange}
-                  className="w-full p-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg"
-                >
-                  <MdAdd size={24} className="mx-auto" />
+                  <MdDelete size={18} />
                 </button>
               </div>
-            </div>
+            ))}
           </div>
-        )}
-
-        {/* MODO 3: Seleccionadas */}
-        {strategy === 'selected' && (
-          <PersonSelector
-            title={`Asignar ${selectedRows.size} filas seleccionadas`}
-            persons={persons}
-            onSelect={handleSelectedRows}
-            selectedRows={selectedRows}
-          />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

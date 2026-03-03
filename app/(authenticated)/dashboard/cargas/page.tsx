@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
@@ -36,7 +38,7 @@ interface InventariadorAssignment {
   inicio: number;
   fin: number;
   codInventariador?: number;
-  nombreInventariador?: string;
+  nombre?: string;
 }
 
 interface Person {
@@ -146,7 +148,7 @@ export default function CargasPage() {
 
       setInventariadores(invs.map(i => ({
         id: i.codInventariador!,
-        name: i.nombreInventariador,
+        name: i.nombre,
         subtitle: i.dni
       })));
 

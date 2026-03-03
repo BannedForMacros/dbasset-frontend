@@ -37,7 +37,6 @@ export const authService = {
       const tokenBase64 = btoa(`${credentials.username}:${credentials.password}`);
       const authHeader = `Basic ${tokenBase64}`;
 
-      // 2. ⚠️ IMPORTANTE: Ya NO seleccionamos empresa automáticamente
       // Siempre dejamos currentCompanyId como undefined para forzar el selector
 
       // 3. Construir el objeto de sesión

@@ -39,7 +39,7 @@ export default function CargaDetalleModal({ codCarga, descripcion, onClose }: Ca
       detalle.codActivo?.toLowerCase().includes(searchTerm) ||
       detalle.activo?.descripcion?.toLowerCase().includes(searchTerm) ||
       detalle.responsable?.nombreResponsable?.toLowerCase().includes(searchTerm) ||
-      detalle.inventariador?.nombreInventariador?.toLowerCase().includes(searchTerm)
+      detalle.inventariador?.nombre?.toLowerCase().includes(searchTerm)
     );
   });
 
@@ -155,7 +155,7 @@ export default function CargaDetalleModal({ codCarga, descripcion, onClose }: Ca
                         <div className="flex items-center gap-2">
                           <MdAssignmentInd className="text-green-600" size={16} />
                           <span className="text-gray-800 font-medium">
-                            {detalle.inventariador.nombreInventariador}
+                            {detalle.inventariador.nombre}
                           </span>
                         </div>
                       ) : (

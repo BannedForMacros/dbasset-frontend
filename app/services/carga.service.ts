@@ -52,7 +52,7 @@ export interface DetalleCarga {
   };
   inventariador?: {
     codInventariador?: number;
-    nombreInventariador?: string;
+    nombre?: string;
   };
 }
 

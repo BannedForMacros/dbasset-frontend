@@ -24,10 +24,14 @@ export default function PersonSelector({
 }: PersonSelectorProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredPersons = persons.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.subtitle || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+const filteredPersons = (persons || []).filter(p => {
+  // Usamos una constante para asegurar que siempre haya un string, incluso si name es undefined
+  const nombre = p?.name?.toString().toLowerCase() || "";
+  const subtitulo = p?.subtitle?.toString().toLowerCase() || "";
+  const busqueda = searchTerm.toLowerCase();
+
+  return nombre.includes(busqueda) || subtitulo.includes(busqueda);
+});
 
   return (
     <div className="space-y-3">

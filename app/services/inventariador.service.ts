@@ -4,7 +4,7 @@ const RESOURCE = '/inventariadores';
 
 export interface Inventariador {
   codInventariador?: number;
-  nombreInventariador: string;
+  nombre: string;
   dni?: string;
   telefono?: string;
   email?: string;
@@ -13,10 +13,12 @@ export interface Inventariador {
   activo?: boolean;
   createdAt?: string;
   updatedAt?: string;
+  clave?: string;
+  usuario?: string;
 }
 
 export interface InventariadorCreateRequest {
-  nombreInventariador: string;
+  nombre: string;
   dni?: string;
   telefono?: string;
   email?: string;
@@ -24,7 +26,7 @@ export interface InventariadorCreateRequest {
 }
 
 export interface InventariadorUpdateRequest {
-  nombreInventariador?: string;
+  nombre?: string;
   dni?: string;
   telefono?: string;
   email?: string;
@@ -82,10 +84,24 @@ export const inventariadorService = {
    * Para búsquedas más complejas, considera agregar un endpoint en el backend
    */
   buscarPorNombre: async (nombre: string): Promise<Inventariador[]> => {
-    const inventariadores = await inventariadorService.listarActivos();
-    return inventariadores.filter(inv =>
-      inv.nombreInventariador.toLowerCase().includes(nombre.toLowerCase())
-    );
+    try {
+      const inventariadores = await inventariadorService.listarActivos();
+      console.log("Datos recibidos del backend:", inventariadores); // Para depurar
+
+      if (!Array.isArray(inventariadores)) return [];
+
+      return inventariadores.filter(inv => {
+        // Usamos encadenamiento opcional (?.) para evitar el "TypeError"
+        // Si nombre es undefined, usamos un string vacío ""
+        const nombreInv = inv.nombre?.toLowerCase() || "";
+        const terminoBusqueda = nombre?.toLowerCase() || "";
+        
+        return nombreInv.includes(terminoBusqueda);
+      });
+    } catch (error) {
+      console.error("Error en la búsqueda de inventariadores:", error);
+      return [];
+    }
   },
 
   /**
