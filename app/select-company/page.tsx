@@ -1,83 +1,177 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { authService, LoginResponse, Empresa } from '../services/auth.service';
-import { MdBusiness, MdArrowForward } from 'react-icons/md';
+import Image from 'next/image';
+import { LogOut, PlusCircle, LayoutDashboard, Loader2 } from 'lucide-react';
+
+// Importamos tus componentes personalizados
+import { Button } from '../components/Button';
+import { Card } from '../components/Card';
+import { Modal } from '../components/Modal';
 
 export default function SelectCompanyPage() {
   const router = useRouter();
+  
+  // Estado inicial
+  const [user, setUser] = useState<LoginResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showNoCompanyModal, setShowNoCompanyModal] = useState(false);
 
-  // ✅ SOLUCIÓN: Obtener datos directamente, sin useState ni isMounted
-  const user: LoginResponse | null = typeof window !== 'undefined' 
-    ? authService.getUserData() 
-    : null;
-
-  // ✅ Verificar autenticación solo una vez al montar
   useEffect(() => {
-    if (!user || !user.authHeader) {
-      router.replace('/login');
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // Usamos setTimeout para mover la lógica al final de la pila de ejecución
+    // y evitar el error de "synchronous setState" de ESLint.
+    const timer = setTimeout(() => {
+      const userData = authService.getUserData();
 
-const handleSelect = useCallback((empresa: Empresa) => {
-  console.log('🏢 Seleccionando empresa:', empresa.codEmpresa);
-  authService.selectCompany(empresa.codEmpresa);
-  
-  // ✅ Verificar que se guardó correctamente
-  const updated = authService.getUserData();
-  console.log('✅ Empresa guardada:', updated?.currentCompanyId);
-  
-  router.push('/dashboard');
-}, [router]);
+      if (!userData || !userData.authHeader) {
+        router.replace('/login');
+        return;
+      }
 
-  // Si no hay usuario, no renderizar nada (ya está redirigiendo)
+      setUser(userData);
+      
+      // Verificamos si NO tiene empresas asignadas
+      if (!userData.empresas || userData.empresas.length === 0) {
+        setShowNoCompanyModal(true);
+      }
+      
+      setLoading(false);
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [router]);
+
+  const handleSelect = useCallback((empresa: Empresa) => {
+    authService.selectCompany(empresa.codEmpresa);
+    router.push('/dashboard');
+  }, [router]);
+
+  const handleLogout = () => {
+    authService.logout();
+    router.replace('/login');
+  };
+
+  const handleCreateCompany = () => {
+    router.push('/create-company'); 
+  };
+
+  // Spinner de carga inicial elegante
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-[#1e4786]" size={40} />
+      </div>
+    );
+  }
+
+  // Si terminó de cargar y no hay usuario (redireccionando), no renderizamos nada
   if (!user) return null;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
-      <div className="max-w-2xl w-full">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">Seleccione una Empresa</h1>
-          <p className="text-gray-600 mt-2">
-            Hola, <span className="font-semibold">{user.nombreCompleto}</span>. Tienes acceso a los siguientes RUCs:
+    <div className="min-h-screen w-full flex flex-col relative bg-slate-50 overflow-hidden">
+      
+      {/* --- FONDO TECNOLÓGICO (Solución al espacio vacío) --- */}
+      {/* 1. Degradado base suave */}
+      <div className="absolute inset-0 bg-gradient-to-b from-blue-50/80 via-slate-50 to-white -z-20" />
+      
+      {/* 2. Patrón de Grilla (Grid) Sutil - Da estructura profesional */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px] -z-10"></div>
+      
+      {/* 3. Mancha de luz central (Spotlight) detrás del contenido */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-400/10 blur-[100px] rounded-full -z-10 pointer-events-none"></div>
+
+
+      {/* --- CONTENIDO PRINCIPAL (Centrado Verticalmente) --- */}
+      <main className="flex-1 flex flex-col items-center justify-center p-4 w-full animate-in fade-in zoom-in-95 duration-500">
+        
+        <div className="w-full max-w-4xl flex flex-col items-center">
+          
+          {/* Header */}
+          <div className="text-center mb-10">
+            <div className="relative w-48 h-16 mx-auto mb-6 transition-transform hover:scale-105 duration-500">
+               <Image 
+                 src="/db.png" 
+                 alt="Data Business" 
+                 fill 
+                 className="object-contain" 
+                 priority 
+               />
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold text-[#1e4786] mb-3 tracking-tight">
+              ¡Hola, {user.nombreCompleto?.split(' ')[0]}!
+            </h1>
+            <p className="text-slate-500 text-lg font-medium">
+              Selecciona una empresa para gestionar tus activos
+            </p>
+          </div>
+
+          {/* Grid de Empresas */}
+          <div className="w-full grid gap-6 md:grid-cols-2 mb-10">
+            {user.empresas?.map((emp) => (
+              <Card
+                key={emp.codEmpresa}
+                title={emp.razonSocial}
+                subtitle={emp.ruc}
+                badge={emp.rol}
+                onClick={() => handleSelect(emp)}
+              />
+            ))}
+          </div>
+
+          {/* Botones de Acción */}
+          <div className="flex flex-col sm:flex-row gap-4 w-full max-w-lg justify-center">
+             <Button variant="flat-blue" fullWidth onClick={handleCreateCompany}>
+                <PlusCircle size={20} />
+                Crear Nueva Empresa
+             </Button>
+
+             <Button variant="flat-red" fullWidth onClick={handleLogout}>
+                <LogOut size={20} />
+                Cerrar Sesión
+             </Button>
+          </div>
+
+        </div>
+      </main>
+      
+      {/* Footer */}
+      <footer className="py-6 text-center relative z-10">
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest hover:text-[#22c4a1] transition-colors cursor-default">
+          Desarrollado por Data Business S.A.C.
+        </p>
+      </footer>
+
+      {/* --- MODAL: SIN EMPRESA --- */}
+      <Modal isOpen={showNoCompanyModal}>
+        <div className="flex flex-col items-center text-center p-2">
+          <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6 animate-pulse">
+            <LayoutDashboard size={40} className="text-[#1e4786]" />
+          </div>
+          
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">
+            Aún no tienes empresas
+          </h2>
+          <p className="text-gray-600 mb-8 text-sm leading-relaxed px-4">
+            Para acceder al panel de control y gestionar activos, es necesario que registres tu primera organización.
           </p>
-        </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          {user.empresas && user.empresas.map((emp) => (
-            <button
-              key={emp.codEmpresa}
-              onClick={() => handleSelect(emp)}
-              className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-blue-500 transition-all text-left group flex flex-col gap-2"
+          <div className="w-full space-y-3">
+            <Button variant="primary" fullWidth onClick={handleCreateCompany}>
+              Crear mi primera empresa
+            </Button>
+            
+            <button 
+              onClick={handleLogout}
+              className="w-full py-3 text-sm text-gray-400 hover:text-red-500 transition-colors font-medium"
             >
-              <div className="flex items-center justify-between w-full">
-                <div className="p-3 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                  <MdBusiness size={24} />
-                </div>
-                <MdArrowForward className="text-gray-300 group-hover:text-blue-500" size={24} />
-              </div>
-              
-              <div>
-                <h3 className="font-bold text-gray-800 text-lg">{emp.razonSocial}</h3>
-                <p className="text-sm text-gray-500 font-mono">RUC: {emp.ruc}</p>
-                <span className="inline-block mt-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded border">
-                  Rol: {emp.rol}
-                </span>
-              </div>
+              Cancelar y salir
             </button>
-          ))}
+          </div>
         </div>
+      </Modal>
 
-        <div className="mt-8 text-center">
-          <button 
-            onClick={() => { authService.logout(); }}
-            className="text-sm text-red-500 hover:text-red-700 underline"
-          >
-            Cerrar Sesión
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
