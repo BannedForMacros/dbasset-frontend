@@ -39,6 +39,7 @@ export interface DetalleCarga {
   inventariado?: string;
   fechainventario?: string;   // ← AGREGAR
   obs?: string;               // ← AGREGAR
+  modificado?: number;          // ← AGREGAR
   codEstado?: number;
   activo?: {
     codActivo?: string;
