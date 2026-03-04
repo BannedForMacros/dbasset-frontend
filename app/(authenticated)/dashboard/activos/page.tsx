@@ -1,19 +1,25 @@
+/* eslint-disable @next/next/no-img-element */
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
 import { activoService, Activo } from '../../../services/activo.service';
-import { cargaService, Carga } from '../../../services/carga.service';
+import { cargaService, Carga, DetalleCarga as DetalleCargaType } from '../../../services/carga.service';
 import { localService, Local } from '../../../services/local.service';
 import { areaService, Area } from '../../../services/area.service';
 import { oficinaService, Oficina } from '../../../services/oficina.service';
 import { responsableService, Responsable } from '../../../services/responsable.service';
 import { estadoService, Estado } from '../../../services/estado.service';
+import { inventariadorService, Inventariador } from '../../../services/inventariador.service';
+import { cargaFirmaService, CargaFirma } from '../../../services/carga-firma.service';
+
 import {
   MdAdd, MdBusiness, MdPerson, MdCheckCircle,
   MdInventory, MdFilterList, MdSearch, MdClear,
   MdLayers, MdMeetingRoom, MdInsertDriveFile, MdInfo,
-  MdVisibility, MdDelete, MdLocationOn
+  MdVisibility, MdDelete, MdLocationOn, MdDownload,
+  MdClose, MdDraw, MdPendingActions, MdAssignment,
+  MdBarChart,
 } from 'react-icons/md';
 
 import Select from '../../../components/Select';
@@ -24,9 +30,16 @@ import { FormData as ActivoFormData } from './components/ModalActivo';
 import ModalActivo from './components/ModalActivo';
 import ModalDetalle from './components/ModalDetalle';
 
+// ─── tipos ────────────────────────────────────────────────────────────────────
 interface DetalleCarga { idDetalle?: number; carga?: Carga; activo?: Activo; codActivo?: string; }
-interface ActivoConCarga extends Activo { detalleCarga?: DetalleCarga; }
+interface ActivoConCarga extends Activo {
+  detalleCarga?: DetalleCarga;
+  inventariado?: string;   // "0" | "1"
+  codEstadoInv?: number;   // estado del detalle_carga
+}
 
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
 function getEstadoBadgeType(nombre: string): 'good' | 'regular' | 'bad' | 'neutral' {
   const n = nombre.toLowerCase();
   if (n.includes('bueno') || n.includes('nuevo') || n.includes('excelente')) return 'good';
@@ -35,16 +48,335 @@ function getEstadoBadgeType(nombre: string): 'good' | 'regular' | 'bad' | 'neutr
   return 'neutral';
 }
 
-/* ── Tooltip de ubicación ── */
+// ─── Export CSV/Excel ─────────────────────────────────────────────────────────
+function exportarCSV(activos: ActivoConCarga[], nombre = 'activos') {
+  const headers = [
+    'Código', 'Descripción', 'Marca', 'Modelo', 'Serie', 'Color',
+    'Local', 'Área', 'Oficina', 'Custodio', 'Estado', 'Inventariado',
+  ];
+  const rows = activos.map(a => [
+    a.codActivo,
+    a.descripcion,
+    a.marca ?? '',
+    a.modelo ?? '',
+    a.serie ?? '',
+    a.color ?? '',
+    (a.local as Local)?.nombreLocal ?? '',
+    (a.area as Area)?.nombreArea ?? '',
+    (a.oficina as Oficina)?.nombreOficina ?? '',
+    (a.responsable as Responsable)?.nombreResponsable ?? '',
+    (a.estado as Estado)?.nombreEstado ?? '',
+    a.inventariado === '1' ? 'Sí' : 'No',
+  ]);
+  const bom = '\uFEFF';
+  const csv = bom + [headers, ...rows]
+    .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+    .join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${nombre}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODAL: Detalle de Carga (activos con estado inventariado)
+// ══════════════════════════════════════════════════════════════════════════════
+function ModalDetalleCarga({
+  open, carga, detalles, onClose,
+}: {
+  open: boolean;
+  carga: Carga | null;
+  detalles: DetalleCargaType[];
+  onClose: () => void;
+}) {
+  if (!open || !carga) return null;
+
+  const total        = detalles.length;
+  const inventariados = detalles.filter(d => d.inventariado?.trim() === '1').length;
+  const pct          = total > 0 ? Math.round((inventariados / total) * 100) : 0;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-4xl rounded-2xl overflow-hidden flex flex-col"
+        style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0', maxHeight: '85vh' }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4"
+          style={{ borderBottom: '1.5px solid #f1f5f9' }}>
+          <div>
+            <h2 className="text-base font-bold" style={{ color: '#0f172a' }}>
+              Detalle de Carga - {carga.descripcion}
+            </h2>
+            <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>{carga.descripcion}</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+            <MdClose size={20} style={{ color: '#64748b' }} />
+          </button>
+        </div>
+
+        {/* Progreso */}
+        <div className="px-6 py-4" style={{ borderBottom: '1.5px solid #f1f5f9' }}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <MdBarChart size={16} style={{ color: '#1e4786' }} />
+              <span className="text-sm font-semibold" style={{ color: '#0f172a' }}>
+                Progreso de inventario
+              </span>
+            </div>
+            <span className="text-sm font-bold" style={{ color: pct === 100 ? '#0f9b76' : '#1e4786' }}>
+              {inventariados} / {total} ({pct}%)
+            </span>
+          </div>
+          <div className="w-full h-2 rounded-full" style={{ backgroundColor: '#f1f5f9' }}>
+            <div
+              className="h-2 rounded-full transition-all duration-500"
+              style={{ width: `${pct}%`, backgroundColor: pct === 100 ? '#22c4a1' : '#1e4786' }}
+            />
+          </div>
+        </div>
+
+        {/* Tabla con obs y fechainventario */}
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full">
+            <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+              <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
+                {['#', 'Código', 'Descripción', 'Responsable', 'Fecha Inv.', 'Observación', 'Estado'].map(h => (
+                  <th key={h}
+                    className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider"
+                    style={{ color: '#94a3b8', backgroundColor: '#fafafa' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {detalles.map((d, i) => {
+                const esInv = d.inventariado?.trim() === '1';
+                return (
+                  <tr key={d.id ?? i}
+                    style={{
+                      borderBottom: '1px solid #f8fafc',
+                      backgroundColor: esInv ? 'rgba(34,196,161,0.02)' : 'transparent',
+                    }}>
+                    <td className="px-4 py-3 text-xs font-mono font-bold" style={{ color: '#cbd5e1' }}>
+                      {i + 1}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-mono px-1.5 py-0.5 rounded"
+                        style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}>
+                        {d.codActivo}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm" style={{ color: '#0f172a', minWidth: 160 }}>
+                      {d.activo?.descripcion ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm" style={{ color: '#64748b' }}>
+                      {d.responsable?.nombreResponsable ?? '—'}
+                    </td>
+                    {/* FECHA INVENTARIO */}
+                    <td className="px-4 py-3 text-xs" style={{ color: '#64748b', minWidth: 130 }}>
+                      {d.fechainventario ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(30,71,134,0.06)', color: '#1e4786' }}>
+                          {d.fechainventario}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#e2e8f0' }}>—</span>
+                      )}
+                    </td>
+                    {/* OBSERVACIÓN */}
+                    <td className="px-4 py-3 text-xs" style={{ color: '#64748b', maxWidth: 200 }}>
+                      {d.obs ? (
+                        <span className="block truncate" title={d.obs}>{d.obs}</span>
+                      ) : (
+                        <span style={{ color: '#e2e8f0' }}>—</span>
+                      )}
+                    </td>
+                    {/* ESTADO INVENTARIADO */}
+                    <td className="px-4 py-3">
+                      {esInv ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                          style={{ backgroundColor: 'rgba(34,196,161,0.1)', color: '#0f9b76' }}>
+                          <MdCheckCircle size={13} /> Inventariado
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                          style={{ backgroundColor: 'rgba(148,163,184,0.1)', color: '#94a3b8' }}>
+                          <MdPendingActions size={13} /> Pendiente
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {detalles.length === 0 && (
+            <div className="text-center py-16">
+              <MdAssignment size={36} style={{ color: '#e2e8f0', margin: '0 auto 8px' }} />
+              <p className="text-sm" style={{ color: '#94a3b8' }}>Sin detalles para esta carga</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-3 flex justify-end"
+          style={{ borderTop: '1.5px solid #f1f5f9', backgroundColor: '#fafafa' }}>
+          <button onClick={onClose}
+            className="px-4 py-2 rounded-xl text-sm font-semibold transition-colors"
+            style={{ color: '#64748b', backgroundColor: '#f1f5f9' }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#e2e8f0'}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODAL: Firmas de la Carga
+// ══════════════════════════════════════════════════════════════════════════════
+function ModalFirmas({
+  open, carga, firmas, loading, responsables, onClose,
+}: {
+  open: boolean;
+  carga: Carga | null;
+  firmas: CargaFirma[];
+  loading: boolean;
+  responsables: Responsable[];
+  onClose: () => void;
+}) {
+  if (!open || !carga) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-2xl rounded-2xl overflow-hidden flex flex-col"
+        style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0', maxHeight: '80vh' }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4"
+          style={{ borderBottom: '1.5px solid #f1f5f9' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+              style={{ backgroundColor: 'rgba(30,71,134,0.08)' }}>
+              <MdDraw size={20} style={{ color: '#1e4786' }} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold" style={{ color: '#0f172a' }}>
+                Firmas — {carga.descripcion}
+              </h2>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+            <MdClose size={20} style={{ color: '#64748b' }} />
+          </button>
+        </div>
+
+        {/* Contenido */}
+        <div className="overflow-y-auto flex-1 p-6">
+          {loading ? (
+            <div className="grid grid-cols-2 gap-4">
+              {[1, 2].map(i => (
+                <div key={i} className="rounded-xl p-4 animate-pulse"
+                  style={{ backgroundColor: '#f8fafc', border: '1.5px solid #f1f5f9', height: 160 }} />
+              ))}
+            </div>
+          ) : firmas.length === 0 ? (
+            <div className="text-center py-16">
+              <MdDraw size={36} style={{ color: '#e2e8f0', margin: '0 auto 8px' }} />
+              <p className="text-sm font-medium" style={{ color: '#94a3b8' }}>
+                No hay firmas registradas para esta carga
+              </p>
+              <p className="text-xs mt-1" style={{ color: '#cbd5e1' }}>
+                Las firmas se registran desde la app móvil
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {firmas.map((f, i) => {
+                // Cruzamos codResponsable con la lista de responsables
+                const resp = responsables.find(r => r.codResponsable === f.codResponsable);
+                const nombre = resp?.nombreResponsable ?? f.nombreResponsable ?? `Responsable #${f.codResponsable}`;
+                const inicial = nombre.charAt(0).toUpperCase();
+
+                return (
+                  <div key={f.id ?? i} className="rounded-xl p-4"
+                    style={{ backgroundColor: '#f8fafc', border: '1.5px solid #f1f5f9' }}>
+                    {/* Info responsable */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                        style={{ backgroundColor: '#1e4786' }}>
+                        {inicial}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold leading-tight" style={{ color: '#0f172a' }}>
+                          {nombre}
+                        </p>
+                        {f.nombreOficina && (
+                          <p className="text-xs" style={{ color: '#94a3b8' }}>{f.nombreOficina}</p>
+                        )}
+                      </div>
+                    </div>
+                    {/* Firma imagen */}
+                    {f.firma ? (
+                      <div className="rounded-lg overflow-hidden flex items-center justify-center"
+                        style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0', minHeight: 100 }}>
+                        <img
+                          src={f.firma.startsWith('data:') ? f.firma : `data:image/png;base64,${f.firma}`}
+                          alt={`Firma de ${nombre}`}
+                          className="max-h-24 object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded-lg flex items-center justify-center"
+                        style={{ backgroundColor: '#f1f5f9', border: '1.5px dashed #cbd5e1', minHeight: 80 }}>
+                        <p className="text-xs" style={{ color: '#94a3b8' }}>Sin imagen de firma</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-3 flex justify-end"
+          style={{ borderTop: '1.5px solid #f1f5f9', backgroundColor: '#fafafa' }}>
+          <button onClick={onClose}
+            className="px-4 py-2 rounded-xl text-sm font-semibold transition-colors"
+            style={{ color: '#64748b', backgroundColor: '#f1f5f9' }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#e2e8f0'}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TOOLTIP UBICACIÓN
+// ══════════════════════════════════════════════════════════════════════════════
 function UbicacionTooltip({ local, area, oficina }: {
   local?: Local; area?: Area; oficina?: Oficina;
 }) {
   const [visible, setVisible] = useState(false);
-
-  if (!local?.nombreLocal) {
-    return <span style={{ color: '#e2e8f0' }}>—</span>;
-  }
-
+  if (!local?.nombreLocal) return <span style={{ color: '#e2e8f0' }}>—</span>;
   return (
     <div className="relative inline-flex" style={{ zIndex: visible ? 50 : 'auto' }}>
       <button
@@ -61,31 +393,22 @@ function UbicacionTooltip({ local, area, oficina }: {
         <MdLocationOn size={14} />
         <span className="text-xs font-medium truncate max-w-[80px]">{local.nombreLocal}</span>
       </button>
-
       {visible && (
-        <div
-          className="absolute left-0 bottom-full mb-2 rounded-xl p-3 min-w-[180px]"
+        <div className="absolute left-0 bottom-full mb-2 rounded-xl p-3 min-w-[180px]"
           style={{
-            backgroundColor: '#fff',
-            border: '1.5px solid #e2e8f0',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
-            pointerEvents: 'none',
-          }}
-        >
-          {/* Flecha */}
+            backgroundColor: '#fff', border: '1.5px solid #e2e8f0',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.1)', pointerEvents: 'none',
+          }}>
           <div style={{
             position: 'absolute', bottom: '-6px', left: '16px',
             width: '10px', height: '10px', backgroundColor: '#fff',
             border: '1.5px solid #e2e8f0', borderTop: 'none', borderLeft: 'none',
             transform: 'rotate(45deg)',
           }} />
-
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <MdBusiness size={13} style={{ color: '#1e4786', flexShrink: 0 }} />
-              <span className="text-xs font-semibold" style={{ color: '#0f172a' }}>
-                {local.nombreLocal}
-              </span>
+              <span className="text-xs font-semibold" style={{ color: '#0f172a' }}>{local.nombreLocal}</span>
             </div>
             {area?.nombreArea && (
               <div className="flex items-center gap-2">
@@ -106,7 +429,9 @@ function UbicacionTooltip({ local, area, oficina }: {
   );
 }
 
-/* ── Componente de fila ── */
+// ══════════════════════════════════════════════════════════════════════════════
+// FILA DE ACTIVO
+// ══════════════════════════════════════════════════════════════════════════════
 function ActivoRow({
   item, index, onView, onDelete,
 }: {
@@ -117,17 +442,20 @@ function ActivoRow({
 }) {
   const [hovered, setHovered] = useState(false);
 
-  const estado     = item.estado as Estado | undefined;
-  const local      = item.local as Local | undefined;
-  const area       = item.area as Area | undefined;
-  const oficina    = item.oficina as Oficina | undefined;
-  const resp       = item.responsable as Responsable | undefined;
+  const estado   = item.estado as Estado | undefined;
+  const local    = item.local as Local | undefined;
+  const area     = item.area as Area | undefined;
+  const oficina  = item.oficina as Oficina | undefined;
+  const resp     = item.responsable as Responsable | undefined;
+  const esInv    = item.inventariado?.trim() === '1';
 
   return (
     <tr
       style={{
         borderBottom: '1px solid #f8fafc',
-        backgroundColor: hovered ? '#f8fbff' : 'transparent',
+        backgroundColor: hovered
+          ? (esInv ? 'rgba(34,196,161,0.04)' : '#f8fbff')
+          : (esInv ? 'rgba(34,196,161,0.02)' : 'transparent'),
         transition: 'background-color 0.1s',
       }}
       onMouseEnter={() => setHovered(true)}
@@ -140,25 +468,42 @@ function ActivoRow({
 
       {/* Bien */}
       <td className="px-5 py-3.5" style={{ minWidth: '200px' }}>
-        <p className="font-semibold text-sm leading-tight" style={{ color: '#0f172a' }}>
-          {item.descripcion}
-        </p>
-        <span
-          className="text-xs font-mono px-1.5 py-0.5 rounded mt-1 inline-block"
-          style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}
-        >
-          {item.codActivo}
-        </span>
+        <div className="flex items-start gap-2">
+          {/* Indicador inventariado */}
+          <div className="mt-0.5 flex-shrink-0">
+            {esInv ? (
+              <div title="Inventariado"
+                style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  backgroundColor: '#22c4a1',
+                  boxShadow: '0 0 0 3px rgba(34,196,161,0.2)',
+                }} />
+            ) : (
+              <div title="Pendiente"
+                style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  backgroundColor: '#e2e8f0',
+                }} />
+            )}
+          </div>
+          <div>
+            <p className="font-semibold text-sm leading-tight" style={{ color: '#0f172a' }}>
+              {item.descripcion}
+            </p>
+            <span className="text-xs font-mono px-1.5 py-0.5 rounded mt-1 inline-block"
+              style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}>
+              {item.codActivo}
+            </span>
+          </div>
+        </div>
       </td>
 
       {/* Custodio */}
       <td className="px-5 py-3.5" style={{ minWidth: '140px' }}>
         {resp ? (
           <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 text-white"
-              style={{ backgroundColor: '#1e4786' }}
-            >
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 text-white"
+              style={{ backgroundColor: '#1e4786' }}>
               {resp.nombreResponsable.charAt(0).toUpperCase()}
             </div>
             <span className="text-sm" style={{ color: '#0f172a' }}>{resp.nombreResponsable}</span>
@@ -168,7 +513,7 @@ function ActivoRow({
         )}
       </td>
 
-      {/* Ubicación — tooltip */}
+      {/* Ubicación */}
       <td className="px-5 py-3.5">
         <UbicacionTooltip local={local} area={area} oficina={oficina} />
       </td>
@@ -178,7 +523,22 @@ function ActivoRow({
         {estado?.nombreEstado ? (
           <Badge label={estado.nombreEstado} type={getEstadoBadgeType(estado.nombreEstado)} />
         ) : (
-          <span className="text-xs" style={{ color: '#000000' }}>Sin Estado</span>
+          <span className="text-xs" style={{ color: '#cbd5e1' }}>—</span>
+        )}
+      </td>
+
+      {/* Inventariado */}
+      <td className="px-5 py-3.5">
+        {esInv ? (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
+            style={{ backgroundColor: 'rgba(34,196,161,0.1)', color: '#0f9b76' }}>
+            <MdCheckCircle size={12} /> Sí
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
+            style={{ backgroundColor: '#f1f5f9', color: '#94a3b8' }}>
+            <MdPendingActions size={12} /> No
+          </span>
         )}
       </td>
 
@@ -193,50 +553,79 @@ function ActivoRow({
   );
 }
 
-/* ══════════════════════════════════════════
-   PAGE
-══════════════════════════════════════════ */
+// ══════════════════════════════════════════════════════════════════════════════
+// PAGE
+// ══════════════════════════════════════════════════════════════════════════════
 export default function ActivosPage() {
-  const [activos, setActivos]           = useState<ActivoConCarga[]>([]);
-  const [cargas, setCargas]             = useState<Carga[]>([]);
-  const [locales, setLocales]           = useState<Local[]>([]);
-  const [areas, setAreas]               = useState<Area[]>([]);
-  const [oficinas, setOficinas]         = useState<Oficina[]>([]);
-  const [responsables, setResponsables] = useState<Responsable[]>([]);
-  const [estados, setEstados]           = useState<Estado[]>([]);
-  const [loading, setLoading]           = useState(true);
+  // ─── datos base ──────────────────────────────────────────────────────────
+  const [activos,       setActivos]       = useState<ActivoConCarga[]>([]);
+  const [cargas,        setCargas]        = useState<Carga[]>([]);
+  const [locales,       setLocales]       = useState<Local[]>([]);
+  const [areas,         setAreas]         = useState<Area[]>([]);
+  const [oficinas,      setOficinas]      = useState<Oficina[]>([]);
+  const [responsables,  setResponsables]  = useState<Responsable[]>([]);
+  const [estados,       setEstados]       = useState<Estado[]>([]);
+  const [inventariadores, setInventariadores] = useState<Inventariador[]>([]);
+  const [loading,       setLoading]       = useState(true);
 
-  const [showModal, setShowModal]           = useState(false);
-  const [showDetail, setShowDetail]         = useState(false);
-  const [editingActivo, setEditingActivo]   = useState<ActivoConCarga | null>(null);
-  const [selectedActivo, setSelectedActivo] = useState<ActivoConCarga | null>(null);
+  // ─── modal activo ─────────────────────────────────────────────────────────
+  const [showModal,       setShowModal]       = useState(false);
+  const [showDetail,      setShowDetail]      = useState(false);
+  const [editingActivo,   setEditingActivo]   = useState<ActivoConCarga | null>(null);
+  const [selectedActivo,  setSelectedActivo]  = useState<ActivoConCarga | null>(null);
 
-  const [searchTerm,        setSearchTerm]        = useState('');
-  const [filtroCarga,       setFiltroCarga]        = useState('');
-  const [filtroLocal,       setFiltroLocal]        = useState('');
-  const [filtroArea,        setFiltroArea]         = useState('');
-  const [filtroOficina,     setFiltroOficina]      = useState('');
-  const [filtroEstado,      setFiltroEstado]       = useState('');
-  const [filtroResponsable, setFiltroResponsable]  = useState('');
+  // ─── modal detalle carga ──────────────────────────────────────────────────
+  const [showDetalleCarga,    setShowDetalleCarga]    = useState(false);
+  const [detalleCargaItems,   setDetalleCargaItems]   = useState<DetalleCargaType[]>([]);
+  const [loadingDetalle,      setLoadingDetalle]      = useState(false);
+  const [cargaSeleccionada,   setCargaSeleccionada]   = useState<Carga | null>(null);
 
+  // ─── modal firmas ─────────────────────────────────────────────────────────
+  const [showFirmas,     setShowFirmas]     = useState(false);
+  const [firmas,         setFirmas]         = useState<CargaFirma[]>([]);
+  const [loadingFirmas,  setLoadingFirmas]  = useState(false);
+
+  // ─── filtros ──────────────────────────────────────────────────────────────
+  const [searchTerm,         setSearchTerm]         = useState('');
+  const [filtroCarga,        setFiltroCarga]         = useState('');
+  const [filtroLocal,        setFiltroLocal]         = useState('');
+  const [filtroArea,         setFiltroArea]          = useState('');
+  const [filtroOficina,      setFiltroOficina]       = useState('');
+  const [filtroEstado,       setFiltroEstado]        = useState('');
+  const [filtroResponsable,  setFiltroResponsable]   = useState('');
+  const [filtroInventariador,setFiltroInventariador] = useState('');
+  const [filtroInventariado, setFiltroInventariado]  = useState(''); // '' | '1' | '0'
+
+  // ─── mapa codActivo → inventariado (se llena al seleccionar carga) ────────
+  const [, setMapaInventariado] = useState<Record<string, string>>({});
+
+  // ─── carga inicial ────────────────────────────────────────────────────────
   useEffect(() => { cargarDatosIniciales(); }, []);
+
   useEffect(() => {
-    if (filtroCarga && cargas.length > 0) cargarActivosPorCarga(Number(filtroCarga));
+    if (filtroCarga && cargas.length > 0) {
+      cargarActivosPorCarga(Number(filtroCarga));
+    }
   }, [filtroCarga]);
 
   const cargarDatosIniciales = async () => {
     try {
       setLoading(true);
-      const [act, car, loc, are, ofi, res, est] = await Promise.all([
-        activoService.listarTodos(),    cargaService.listarTodas(),
-        localService.listarActivos(),   areaService.listarActivos(),
-        oficinaService.listarActivos(), responsableService.listarActivos(),
+      const [act, car, loc, are, ofi, res, est, inv] = await Promise.all([
+        activoService.listarTodos(),
+        cargaService.listarTodas(),
+        localService.listarActivos(),
+        areaService.listarActivos(),
+        oficinaService.listarActivos(),
+        responsableService.listarActivos(),
         estadoService.listarTodos(),
+        inventariadorService.listarActivos(),
       ]);
       setActivos(act);
       setCargas(car.sort((a: Carga, b: Carga) => (b.codCarga || 0) - (a.codCarga || 0)));
       setLocales(loc); setAreas(are); setOficinas(ofi);
-      setResponsables(res); setEstados(est);
+      setResponsables(res); setEstados(est); setInventariadores(inv);
+      setMapaInventariado({});
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -244,42 +633,149 @@ export default function ActivosPage() {
   const cargarActivosPorCarga = async (codCarga: number) => {
     try {
       setLoading(true);
-      setActivos(await activoService.listarPorCarga(codCarga));
+      // Obtenemos detalles de la carga (tiene inventariado + codActivo)
+      const detalles = await cargaService.obtenerDetalle(codCarga);
+      
+      // Construimos mapa codActivo → inventariado (trim por si viene con espacios)
+      const mapa: Record<string, string> = {};
+      detalles.forEach(d => {
+        if (d.codActivo) mapa[d.codActivo] = (d.inventariado ?? '0').trim();
+      });
+      setMapaInventariado(mapa);
+
+      // Cargamos los activos normales
+      const acts = await activoService.listarPorCarga(codCarga);
+      
+      // Enriquecemos con inventariado desde el mapa
+      const enriquecidos: ActivoConCarga[] = acts.map(a => ({
+        ...a,
+        inventariado: mapa[a.codActivo]?.trim() ?? '0',
+      }));
+      setActivos(enriquecidos);
     } catch { setActivos([]); }
     finally { setLoading(false); }
   };
 
+  // ─── abrir modal detalle de carga ─────────────────────────────────────────
+  const abrirDetalleCarga = async (carga: Carga) => {
+    setCargaSeleccionada(carga);
+    setShowDetalleCarga(true);
+    setLoadingDetalle(true);
+    try {
+      const detalles = await cargaService.obtenerDetalle(carga.codCarga!);
+      setDetalleCargaItems(detalles);
+    } catch { setDetalleCargaItems([]); }
+    finally { setLoadingDetalle(false); }
+  };
+
+  // ─── abrir modal firmas ───────────────────────────────────────────────────
+  const abrirFirmas = async (carga: Carga) => {
+    setCargaSeleccionada(carga);
+    setShowFirmas(true);
+    setLoadingFirmas(true);
+    try {
+      const data = await cargaFirmaService.listarPorCarga(carga.codCarga!);
+      setFirmas(data);
+    } catch { setFirmas([]); }
+    finally { setLoadingFirmas(false); }
+  };
+
+  // ─── filtrado reactivo ────────────────────────────────────────────────────
   const activosFiltrados = useMemo(() => {
     let f = activos;
-    if (filtroLocal)       f = f.filter(i => (i.local as Local)?.codLocal === Number(filtroLocal));
-    if (filtroArea)        f = f.filter(i => (i.area as Area)?.codArea === Number(filtroArea));
-    if (filtroOficina)     f = f.filter(i => (i.oficina as Oficina)?.codOficina === Number(filtroOficina));
-    if (filtroEstado)      f = f.filter(i => (i.estado as Estado)?.codEstado === Number(filtroEstado));
-    if (filtroResponsable) f = f.filter(i => (i.responsable as Responsable)?.codResponsable === Number(filtroResponsable));
+    if (filtroLocal)         f = f.filter(i => (i.local as Local)?.codLocal === Number(filtroLocal));
+    if (filtroArea)          f = f.filter(i => (i.area as Area)?.codArea === Number(filtroArea));
+    if (filtroOficina)       f = f.filter(i => (i.oficina as Oficina)?.codOficina === Number(filtroOficina));
+    if (filtroEstado)        f = f.filter(i => (i.estado as Estado)?.codEstado === Number(filtroEstado));
+    if (filtroResponsable)   f = f.filter(i => (i.responsable as Responsable)?.codResponsable === Number(filtroResponsable));
+    if (filtroInventariado)  f = f.filter(i => (i.inventariado ?? '0') === filtroInventariado);
+    // Filtro inventariador: solo aplica si tenemos el mapa (carga seleccionada)
+    // En este caso el filtro de inventariador se maneja seleccionando la carga que
+    // pertenece a ese inventariador. Si quieres filtrar activos por inventariador
+    // sin seleccionar carga, necesitarías un endpoint adicional en el backend.
+    // Por ahora filtramos las cargas disponibles en el selector de carga.
     if (searchTerm.trim()) {
       const t = searchTerm.toLowerCase();
       f = f.filter(i =>
         i.codActivo.toLowerCase().includes(t) ||
         i.descripcion.toLowerCase().includes(t) ||
-        (i.marca || '').toLowerCase().includes(t) ||
-        (i.modelo || '').toLowerCase().includes(t) ||
-        (i.serie || '').toLowerCase().includes(t)
+        (i.marca ?? '').toLowerCase().includes(t) ||
+        (i.modelo ?? '').toLowerCase().includes(t) ||
+        (i.serie ?? '').toLowerCase().includes(t)
       );
     }
     return f;
-  }, [activos, filtroLocal, filtroArea, filtroOficina, filtroEstado, filtroResponsable, searchTerm]);
+  }, [activos, filtroLocal, filtroArea, filtroOficina, filtroEstado, filtroResponsable, filtroInventariado, searchTerm]);
+
+  // Cargas filtradas por inventariador seleccionado
+  const cargasFiltradas = useMemo(() => {
+    // Nota: la entidad Carga no trae codInventariador directamente en este frontend.
+    // Si tu backend incluye ese dato en el DTO de Carga, puedes filtrar aquí.
+    // Por ahora mostramos todas y el filtro de inventariador carga sus activos via
+    // el endpoint /api/inventariador-v2/{codInv}/activos.
+    return cargas;
+  }, [cargas, filtroInventariador]);
 
   const areasDisponibles    = filtroLocal ? areas.filter(a => (a.local as Local)?.codLocal === Number(filtroLocal)) : areas;
   const oficinasDisponibles = filtroArea  ? oficinas.filter(o => (o.area as Area)?.codArea === Number(filtroArea))  : oficinas;
 
-  const hayFiltros = searchTerm || filtroCarga || filtroLocal || filtroArea || filtroOficina || filtroEstado || filtroResponsable;
+  const hayFiltros = searchTerm || filtroCarga || filtroLocal || filtroArea ||
+    filtroOficina || filtroEstado || filtroResponsable || filtroInventariado || filtroInventariador;
 
   const limpiarFiltros = () => {
     setSearchTerm(''); setFiltroCarga(''); setFiltroLocal('');
     setFiltroArea(''); setFiltroOficina(''); setFiltroEstado('');
-    setFiltroResponsable(''); cargarDatosIniciales();
+    setFiltroResponsable(''); setFiltroInventariado(''); setFiltroInventariador('');
+    setMapaInventariado({});
+    cargarDatosIniciales();
   };
 
+  // ─── cargar por inventariador ─────────────────────────────────────────────
+  const cargarPorInventariador = async (codInv: number) => {
+    try {
+      setLoading(true);
+      // Usamos el endpoint optimizado del backend
+      const res = await fetch(`/api/inventariador-v2/${codInv}/activos`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      // data es ActivoDetalleDTO[] — mapeamos a ActivoConCarga
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mapped: ActivoConCarga[] = (data as any[]).map((d: any) => ({
+        id: undefined,
+        codActivo: d.codActivo,
+        descripcion: d.descripcion,
+        marca: d.marca,
+        modelo: d.modelo,
+        serie: d.serie,
+        color: d.color,
+        local:       { codLocal:       d.codLocal },
+        area:        { codArea:        d.codArea },
+        oficina:     { codOficina:     d.codOficina },
+        responsable: { codResponsable: d.codResponsable },
+        estado:      { codEstado:      d.codEstado },
+        inventariado: d.inventariado ?? '0',
+      }));
+      // Enriquecemos con los objetos completos (local, area, oficina, responsable, estado)
+      const enriquecidos = mapped.map(a => ({
+        ...a,
+        local:       locales.find(l => l.codLocal === (a.local as Local).codLocal) ?? a.local,
+        area:        areas.find(x => x.codArea === (a.area as Area).codArea) ?? a.area,
+        oficina:     oficinas.find(o => o.codOficina === (a.oficina as Oficina).codOficina) ?? a.oficina,
+        responsable: responsables.find(r => r.codResponsable === (a.responsable as Responsable).codResponsable) ?? a.responsable,
+        estado:      estados.find(e => e.codEstado === (a.estado as Estado).codEstado) ?? a.estado,
+      }));
+      setActivos(enriquecidos);
+    } catch { setActivos([]); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => {
+    if (filtroInventariador) {
+      cargarPorInventariador(Number(filtroInventariador));
+    }
+  }, [filtroInventariador]);
+
+  // ─── save / delete ────────────────────────────────────────────────────────
   const handleSave = async (formData: ActivoFormData, editingId: number | null) => {
     const payload = {
       codActivo: formData.codActivo,       codInterno: formData.codInterno,
@@ -296,8 +792,7 @@ export default function ActivosPage() {
     try {
       if (editingId) await activoService.actualizar(editingId, payload);
       else           await activoService.crear(payload);
-      setShowModal(false);
-      setEditingActivo(null);
+      setShowModal(false); setEditingActivo(null);
       setActivos(await activoService.listarTodos());
     } catch { alert('Error al guardar.'); }
   };
@@ -310,15 +805,17 @@ export default function ActivosPage() {
     } catch (e) { console.error(e); }
   };
 
-  const totalAsignados = activos.filter(a => a.responsable).length;
+  // ─── stats ────────────────────────────────────────────────────────────────
+  const totalAsignados   = activos.filter(a => a.responsable).length;
+  const totalInventariados = activos.filter(a => a.inventariado === '1').length;
 
-  /* ── headers de tabla ── */
-  const HEADERS = ['#', 'Bien', 'Custodio', 'Ubicación', 'Estado', 'Acciones'];
+  const HEADERS = ['#', 'Bien', 'Custodio', 'Ubicación', 'Estado', 'Inventariado', 'Acciones'];
 
+  // ══════════════════════════════════════════════════════════════════════════
   return (
     <div className="space-y-6">
 
-      {/* HEADER */}
+      {/* ── HEADER ── */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: '#0f172a' }}>Activos Fijos</h1>
@@ -326,18 +823,30 @@ export default function ActivosPage() {
             <MdInventory size={15} /> Inventario general de bienes
           </p>
         </div>
-        <button
-          onClick={() => { setEditingActivo(null); setShowModal(true); }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
-          style={{ backgroundColor: '#1e4786' }}
-          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#163564'}
-          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#1e4786'}
-        >
-          <MdAdd size={19} /> Nuevo Activo
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportarCSV(activosFiltrados, `activos${filtroCarga ? `_carga${filtroCarga}` : ''}`)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
+            style={{ backgroundColor: '#f1f5f9', color: '#64748b', border: '1.5px solid #e2e8f0' }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#e2e8f0'}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+            title="Exportar activos filtrados a Excel/CSV"
+          >
+            <MdDownload size={18} /> Exportar
+          </button>
+          <button
+            onClick={() => { setEditingActivo(null); setShowModal(true); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
+            style={{ backgroundColor: '#1e4786' }}
+            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#163564'}
+            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#1e4786'}
+          >
+            <MdAdd size={19} /> Nuevo Activo
+          </button>
+        </div>
       </div>
 
-      {/* FILTROS */}
+      {/* ── FILTROS ── */}
       <div className="rounded-2xl p-5" style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0' }}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -351,8 +860,7 @@ export default function ActivosPage() {
             )}
           </div>
           {hayFiltros && (
-            <button
-              onClick={limpiarFiltros}
+            <button onClick={limpiarFiltros}
               className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg"
               style={{ color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.06)' }}
               onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.12)'}
@@ -363,29 +871,54 @@ export default function ActivosPage() {
           )}
         </div>
 
-        {/* Fila 1 */}
+        {/* Fila 1: carga / inventariador / estado / custodio / búsqueda */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
-          <div className="md:col-span-4">
-            <Select label="Carga" icon={<MdInsertDriveFile size={13}/>}
-              value={filtroCarga} placeholder="Todas las cargas"
-              onChange={v => { setFiltroCarga(v); if (!v) cargarDatosIniciales(); }}
-              options={cargas.map(c => ({ value: c.codCarga!, label: `#${c.codCarga} · ${c.descripcion}` }))} />
-          </div>
           <div className="md:col-span-3">
-            <Select label="Estado" icon={<MdInfo size={13}/>}
+            <Select label="Carga" icon={<MdInsertDriveFile size={13} />}
+              value={filtroCarga} placeholder="Todas las cargas"
+              onChange={v => {
+                setFiltroCarga(v);
+                setFiltroInventariador('');
+                if (!v) cargarDatosIniciales();
+              }}
+              options={cargasFiltradas.map(c => ({ value: c.codCarga!, label: `#${c.codCarga} · ${c.descripcion}` }))}
+            />
+          </div>
+
+          {/* NUEVO: Filtro por Inventariador */}
+          <div className="md:col-span-3">
+            <Select label="Inventariador" icon={<MdAssignment size={13} />}
+              value={filtroInventariador} placeholder="Todos"
+              onChange={v => {
+                setFiltroInventariador(v);
+                setFiltroCarga('');
+                if (!v) cargarDatosIniciales();
+              }}
+              options={inventariadores.map(i => ({ value: i.codInventariador!, label: i.nombre }))}
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <Select label="Estado" icon={<MdInfo size={13} />}
               value={filtroEstado} placeholder="Todos"
               onChange={setFiltroEstado}
-              options={estados.map(e => ({ value: e.codEstado!, label: e.nombreEstado }))} />
+              options={estados.map(e => ({ value: e.codEstado!, label: e.nombreEstado }))}
+            />
           </div>
-          <div className="md:col-span-3">
-            <Select label="Custodio" icon={<MdPerson size={13}/>}
+
+          <div className="md:col-span-2">
+            <Select label="Custodio" icon={<MdPerson size={13} />}
               value={filtroResponsable} placeholder="Todos"
               onChange={setFiltroResponsable}
-              options={responsables.map(r => ({ value: r.codResponsable!, label: r.nombreResponsable }))} />
+              options={responsables.map(r => ({ value: r.codResponsable!, label: r.nombreResponsable }))}
+            />
           </div>
+
           <div className="md:col-span-2">
             <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#64748b' }}>
-              <span className="flex items-center gap-1"><MdSearch size={13} style={{ color: '#1e4786' }}/>Búsqueda</span>
+              <span className="flex items-center gap-1">
+                <MdSearch size={13} style={{ color: '#1e4786' }} />Búsqueda
+              </span>
             </label>
             <div className="relative">
               <MdSearch size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#94a3b8' }} />
@@ -407,31 +940,80 @@ export default function ActivosPage() {
           </div>
         </div>
 
-        {/* Fila 2: Ubicación */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Select label="Local" icon={<MdBusiness size={13}/>}
+        {/* Fila 2: ubicación + inventariado */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Select label="Local" icon={<MdBusiness size={13} />}
             value={filtroLocal} placeholder="Todos"
             onChange={v => { setFiltroLocal(v); setFiltroArea(''); setFiltroOficina(''); }}
-            options={locales.map(l => ({ value: l.codLocal!, label: l.nombreLocal }))} />
-          <Select label="Área" icon={<MdLayers size={13}/>}
+            options={locales.map(l => ({ value: l.codLocal!, label: l.nombreLocal }))}
+          />
+          <Select label="Área" icon={<MdLayers size={13} />}
             value={filtroArea} placeholder="Todas" disabled={!filtroLocal}
             onChange={v => { setFiltroArea(v); setFiltroOficina(''); }}
-            options={areasDisponibles.map(a => ({ value: a.codArea!, label: a.nombreArea }))} />
-          <Select label="Oficina" icon={<MdMeetingRoom size={13}/>}
+            options={areasDisponibles.map(a => ({ value: a.codArea!, label: a.nombreArea }))}
+          />
+          <Select label="Oficina" icon={<MdMeetingRoom size={13} />}
             value={filtroOficina} placeholder="Todas" disabled={!filtroArea}
             onChange={setFiltroOficina}
-            options={oficinasDisponibles.map(o => ({ value: o.codOficina!, label: o.nombreOficina }))} />
+            options={oficinasDisponibles.map(o => ({ value: o.codOficina!, label: o.nombreOficina }))}
+          />
+
+          {/* NUEVO: Filtro por estado de inventario */}
+          <Select label="Inventariado" icon={<MdCheckCircle size={13} />}
+            value={filtroInventariado} placeholder="Todos"
+            onChange={setFiltroInventariado}
+            options={[
+              { value: '1', label: '✓ Inventariado' },
+              { value: '0', label: '○ Pendiente' },
+            ]}
+          />
         </div>
       </div>
 
-      {/* STATS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard icon={<MdInventory size={22}/>}      label="Total Activos"  value={activos.length}                              sub="En inventario" />
-        <StatCard icon={<MdCheckCircle size={22}/>}    label="Asignados"      value={`${totalAsignados} / ${activos.length}`}     accent />
-        <StatCard icon={<MdInsertDriveFile size={22}/>} label="Cargas Activas" value={cargas.length} />
+      {/* ── STATS ── */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard icon={<MdInventory size={22} />}       label="Total Activos"    value={activos.length}                              sub="En inventario" />
+        <StatCard icon={<MdCheckCircle size={22} />}     label="Asignados"        value={`${totalAsignados} / ${activos.length}`}     accent />
+        <StatCard icon={<MdInsertDriveFile size={22} />} label="Cargas Activas"   value={cargas.length} />
+        <StatCard
+          icon={<MdCheckCircle size={22} />}
+          label="Inventariados"
+          value={activos.length > 0 ? `${totalInventariados} / ${activos.length}` : '—'}
+          sub={activos.length > 0 ? `${Math.round((totalInventariados / activos.length) * 100)}%` : undefined}
+        />
       </div>
 
-      {/* TABLA */}
+      {/* ── ACCIONES DE CARGA (solo si hay carga seleccionada) ── */}
+      {filtroCarga && cargasFiltradas.find(c => c.codCarga === Number(filtroCarga)) && (() => {
+        const carga = cargasFiltradas.find(c => c.codCarga === Number(filtroCarga))!;
+        return (
+          <div className="flex items-center gap-3 px-1">
+            <span className="text-xs font-semibold" style={{ color: '#94a3b8' }}>
+              Acciones para Carga #{carga.codCarga}:
+            </span>
+            <button
+              onClick={() => abrirDetalleCarga(carga)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+              style={{ backgroundColor: 'rgba(30,71,134,0.08)', color: '#1e4786', border: '1.5px solid rgba(30,71,134,0.15)' }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(30,71,134,0.14)'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(30,71,134,0.08)'}
+            >
+              <MdAssignment size={15} /> Ver detalle de carga
+            </button>
+            <button
+              onClick={() => abrirFirmas(carga)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+              style={{ backgroundColor: 'rgba(34,196,161,0.08)', color: '#0f9b76', border: '1.5px solid rgba(34,196,161,0.2)' }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(34,196,161,0.15)'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(34,196,161,0.08)'}
+            >
+              <MdDraw size={15} /> Ver firmas
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ── TABLA ── */}
       <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0' }}>
 
         {/* Skeleton */}
@@ -504,12 +1086,23 @@ export default function ActivosPage() {
                   : `${activosFiltrados.length} de ${activos.length} registros`
                 }
               </p>
+              {activosFiltrados.length > 0 && (
+                <button
+                  onClick={() => exportarCSV(activosFiltrados)}
+                  className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                  style={{ color: '#1e4786', backgroundColor: 'rgba(30,71,134,0.06)' }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(30,71,134,0.12)'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(30,71,134,0.06)'}
+                >
+                  <MdDownload size={13} /> Exportar {activosFiltrados.length} registros
+                </button>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      {/* MODALES */}
+      {/* ── MODALES ── */}
       <ModalActivo
         open={showModal}
         onClose={() => { setShowModal(false); setEditingActivo(null); }}
@@ -522,6 +1115,20 @@ export default function ActivosPage() {
         open={showDetail}
         onClose={() => { setShowDetail(false); setSelectedActivo(null); }}
         activo={selectedActivo}
+      />
+      <ModalDetalleCarga
+        open={showDetalleCarga}
+        carga={cargaSeleccionada}
+        detalles={loadingDetalle ? [] : detalleCargaItems}
+        onClose={() => { setShowDetalleCarga(false); setDetalleCargaItems([]); }}
+      />
+      <ModalFirmas
+        open={showFirmas}
+        carga={cargaSeleccionada}
+        firmas={firmas}
+        loading={loadingFirmas}
+        responsables={responsables}
+        onClose={() => { setShowFirmas(false); setFirmas([]); }}
       />
     </div>
   );
