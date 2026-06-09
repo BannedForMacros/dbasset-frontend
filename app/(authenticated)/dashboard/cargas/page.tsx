@@ -117,51 +117,46 @@ export default function CargasPage() {
     setSelectedCarga(null);
   };
 
+  // Carga los catálogos que necesita el wizard (campos del activo, responsables,
+  // inventariadores, ubicaciones). Se usa en AMBOS puntos de entrada del wizard
+  // (botón "Nueva Carga" y botón "Continuar proceso"), para que los campos del
+  // activo SIEMPRE estén disponibles en el paso de mapeo.
+  const cargarDatosWizard = async () => {
+    const campos = await configuracionService.obtenerCampos();
+    console.log('📋 Campos RAW del backend:', campos.length, campos);
+    setCamposDinamicos(campos.filter(c => c.esVisible));
+
+    const [resps, invs] = await Promise.all([
+      responsableService.listarActivos(),
+      inventariadorService.listarActivos()
+    ]);
+
+    setResponsables(resps.map(r => ({
+      id: r.codResponsable!,
+      name: r.nombreResponsable,
+      subtitle: r.cargo
+    })));
+
+    setInventariadores(invs.map(i => ({
+      id: i.codInventariador!,
+      name: i.nombre,
+      subtitle: i.dni
+    })));
+
+    const [locs, ars, offs] = await Promise.all([
+      localService.listarActivos(),
+      areaService.listarActivos(),
+      oficinaService.listarActivos()
+    ]);
+
+    setLocales(locs);
+    setAreas(ars);
+    setOficinas(offs);
+  };
+
   const iniciarWizard = async () => {
     try {
-    const user = authService.getUserData();
-    console.log('👤 Usuario completo:', user);
-    console.log('🏢 Empresa actual en wizard:', user?.currentCompanyId);
-    console.log('🔑 Auth header existe:', !!user?.authHeader);
-    
-    const campos = await configuracionService.obtenerCampos();
-    console.log('📋 Campos RAW del backend:', campos);
-    console.log('📋 Cantidad total:', campos.length);
-    
-    const camposVisibles = campos.filter(c => c.esVisible);
-    console.log('👁️ Campos visibles filtrados:', camposVisibles);
-    console.log('👁️ Cantidad visible:', camposVisibles.length);
-    
-    setCamposDinamicos(camposVisibles);
-      setCamposDinamicos(campos.filter(c => c.esVisible));
-
-      const [resps, invs] = await Promise.all([
-        responsableService.listarActivos(),
-        inventariadorService.listarActivos()
-      ]);
-
-      setResponsables(resps.map(r => ({
-        id: r.codResponsable!,
-        name: r.nombreResponsable,
-        subtitle: r.cargo
-      })));
-
-      setInventariadores(invs.map(i => ({
-        id: i.codInventariador!,
-        name: i.nombre,
-        subtitle: i.dni
-      })));
-
-      const [locs, ars, offs] = await Promise.all([
-        localService.listarActivos(),
-        areaService.listarActivos(),
-        oficinaService.listarActivos()
-      ]);
-
-      setLocales(locs);
-      setAreas(ars);
-      setOficinas(offs);
-
+      await cargarDatosWizard();
       resetWizard();
       setShowWizard(true);
     } catch (error) {
@@ -524,11 +519,16 @@ const handleConfirmarTodo = async () => {
                         )}
                         
                         {carga.estado?.trim() !== 'T' && (
-                          <button 
-                            onClick={() => {
-                              setSelectedCarga(carga);
-                              setWizardStep(carga.estado?.trim() === 'C' ? 2 : 5);
-                              setShowWizard(true);
+                          <button
+                            onClick={async () => {
+                              try {
+                                await cargarDatosWizard();
+                                setSelectedCarga(carga);
+                                setWizardStep(carga.estado?.trim() === 'C' ? 2 : 5);
+                                setShowWizard(true);
+                              } catch (error) {
+                                showToast('error', 'Error al cargar los datos de la carga');
+                              }
                             }}
                             className="p-2 border-2 border-green-600 text-green-600 rounded-lg hover:bg-green-600 hover:text-white transition"
                             title="Continuar proceso"
