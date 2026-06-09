@@ -64,6 +64,9 @@ export default function CargasPage() {
   const [mapeo, setMapeo] = useState<Record<string, string>>({});
 
   const [needsUbicacion, setNeedsUbicacion] = useState(false);
+  // Modo de ubicación elegido explícitamente en el paso de mapeo:
+  // 'unica' = una sola ubicación para toda la carga | 'excel' = viene en columnas del Excel
+  const [modoUbicacion, setModoUbicacion] = useState<'excel' | 'unica' | null>(null);
   const [ubicacionUnica, setUbicacionUnica] = useState<UbicacionUnica | null>(null);
   const [locales, setLocales] = useState<Local[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -110,6 +113,7 @@ export default function CargasPage() {
     setExcelData([]);
     setMapeo({});
     setNeedsUbicacion(false);
+    setModoUbicacion(null);
     setUbicacionUnica(null);
     setResponsableAssignments([]);
     setInventariadorAssignments([]);
@@ -229,27 +233,48 @@ export default function CargasPage() {
     }
   };
 
+  // Cambio explícito del modo de ubicación. Si elige "única", limpiamos cualquier
+  // mapeo de columnas de ubicación para evitar ambigüedad.
+  const handleModoUbicacionChange = (modo: 'excel' | 'unica') => {
+    setModoUbicacion(modo);
+    if (modo === 'unica') {
+      setMapeo(prev => {
+        const m = { ...prev };
+        delete m['cod_local'];
+        delete m['cod_area'];
+        delete m['cod_oficina'];
+        return m;
+      });
+    }
+  };
+
   const handleStep3Next = () => {
     const faltantes = camposDinamicos.filter(c => c.esObligatorio && !mapeo[c.nombreCampoBd]);
-    
+
     if (faltantes.length > 0) {
       showToast('error', 'Campos obligatorios sin mapear', faltantes.map(f => f.etiquetaUsuario).join(', '));
       return;
     }
 
-    const tieneLocal = !!mapeo['cod_local'];
-    const tieneArea = !!mapeo['cod_area'];
-    const tieneOficina = !!mapeo['cod_oficina'];
+    // El usuario DEBE elegir explícitamente cómo asignar la ubicación
+    if (!modoUbicacion) {
+      showToast('warning', 'Elige cómo asignar la ubicación', 'Una sola ubicación para toda la carga, o desde columnas del Excel');
+      return;
+    }
 
-    const tieneUbicacionCompleta = tieneLocal && tieneArea && tieneOficina;
-
-    if (!tieneUbicacionCompleta) {
-      setNeedsUbicacion(true);
-      setWizardStep(4);
-    } else {
+    if (modoUbicacion === 'excel') {
+      const tieneUbicacionCompleta = !!mapeo['cod_local'] && !!mapeo['cod_area'] && !!mapeo['cod_oficina'];
+      if (!tieneUbicacionCompleta) {
+        showToast('error', 'Ubicación incompleta', 'Debes mapear Local, Área y Oficina, o elegir "una sola ubicación"');
+        return;
+      }
       setNeedsUbicacion(false);
       setSelectedRows(new Set(excelData.map((_, i) => i)));
       setWizardStep(5);
+    } else {
+      // 'unica' -> se asigna la ubicación única en el paso 4
+      setNeedsUbicacion(true);
+      setWizardStep(4);
     }
   };
 
@@ -628,6 +653,8 @@ const handleConfirmarTodo = async () => {
                   campos={camposDinamicos}
                   excelHeaders={excelHeaders}
                   mapeo={mapeo}
+                  modoUbicacion={modoUbicacion}
+                  onModoChange={handleModoUbicacionChange}
                   onMapeoChange={(campo, columna) => setMapeo({ ...mapeo, [campo]: columna })}
                   onCampoToggle={(id, key) => {
                     setCamposDinamicos(prev => prev.map(c => 

@@ -7,16 +7,20 @@ interface Step3MapeoProps {
   campos: CampoConfig[];
   excelHeaders: string[];
   mapeo: Record<string, string>;
+  modoUbicacion: 'excel' | 'unica' | null;
+  onModoChange: (modo: 'excel' | 'unica') => void;
   onMapeoChange: (campo: string, columna: string) => void;
   onCampoToggle: (id: number, key: 'esVisible' | 'esObligatorio') => void;
 }
 
-export default function Step3Mapeo({ 
-  campos, 
-  excelHeaders, 
-  mapeo, 
-  onMapeoChange, 
-  onCampoToggle 
+export default function Step3Mapeo({
+  campos,
+  excelHeaders,
+  mapeo,
+  modoUbicacion,
+  onModoChange,
+  onMapeoChange,
+  onCampoToggle
 }: Step3MapeoProps) {
   // Campos de ubicación (no están en configuración dinámica)
   const camposUbicacion = [
@@ -41,65 +45,114 @@ export default function Step3Mapeo({
         </div>
       </div>
 
-      {/* SECCIÓN DE UBICACIÓN (CRÍTICA) */}
+      {/* SELECCIÓN EXPLÍCITA DEL MODO DE UBICACIÓN */}
       <div className="border-2 border-blue-300 rounded-lg overflow-hidden">
         <div className="bg-blue-100 px-4 py-3 border-b border-blue-300 flex items-center gap-2">
           <MdLocationOn className="text-blue-600" size={20} />
-          <h4 className="font-bold text-gray-800">Ubicación (Obligatorio)</h4>
+          <h4 className="font-bold text-gray-800">¿Cómo se asigna la ubicación? (Obligatorio)</h4>
         </div>
-        
-        <div className="p-4 space-y-3 bg-blue-50">
-          {camposUbicacion.map((campo) => (
-            <div key={campo.key} className="flex items-center gap-4 bg-white p-3 rounded-lg border border-blue-200">
-              <div className="w-1/3">
-                <p className="font-bold text-gray-800 flex items-center gap-2">
-                  {campo.label}
-                  <span className="text-red-500 text-xs flex items-center gap-1">
-                    <MdPriorityHigh size={14} /> Requerido
-                  </span>
-                </p>
-                <p className="text-xs text-gray-400 font-mono">DB: {campo.key}</p>
-              </div>
 
-              <div className="flex-1">
-                <select
-                  value={mapeo[campo.key] || ''}
-                  onChange={(e) => onMapeoChange(campo.key, e.target.value)}
-                  className={`w-full px-3 py-2.5 border-2 rounded-lg outline-none transition ${
-                    !mapeo[campo.key]
-                      ? 'border-red-300 bg-red-50 focus:border-red-500'
-                      : 'border-green-300 bg-green-50 focus:border-green-500'
-                  }`}
-                >
-                  <option value="">-- Seleccionar columna --</option>
-                  {excelHeaders.map((h) => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          ))}
+        <div className="p-4 bg-blue-50 space-y-4">
+          {/* Dos opciones explícitas */}
+          <div className="grid sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => onModoChange('unica')}
+              className={`text-left p-4 rounded-lg border-2 transition ${
+                modoUbicacion === 'unica'
+                  ? 'border-blue-600 bg-white ring-2 ring-blue-200'
+                  : 'border-gray-300 bg-white hover:border-blue-400'
+              }`}
+            >
+              <p className="font-bold text-gray-800 flex items-center gap-2">
+                <MdLocationOn size={18} className="text-blue-600" />
+                Una sola ubicación para toda la carga
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                Todos los activos del Excel pertenecen al mismo Local / Área / Oficina.
+                Lo eliges en el siguiente paso.
+              </p>
+            </button>
 
-          {!tieneUbicacion && (
-            <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 flex items-start gap-3">
-              <MdWarning className="text-amber-600 shrink-0 mt-0.5" size={20} />
-              <div className="text-sm text-amber-800">
-                <p className="font-bold mb-1">⚠️ Ubicación Incompleta</p>
-                <p>
-                  Debe mapear <strong>Local</strong>, <strong>Área</strong> y <strong>Oficina</strong>.
-                  Si el Excel no tiene estas columnas, en el siguiente paso podrá asignar 
-                  una ubicación única para toda la carga.
-                </p>
-              </div>
+            <button
+              type="button"
+              onClick={() => onModoChange('excel')}
+              className={`text-left p-4 rounded-lg border-2 transition ${
+                modoUbicacion === 'excel'
+                  ? 'border-blue-600 bg-white ring-2 ring-blue-200'
+                  : 'border-gray-300 bg-white hover:border-blue-400'
+              }`}
+            >
+              <p className="font-bold text-gray-800 flex items-center gap-2">
+                <MdLink size={18} className="text-blue-600" />
+                La ubicación viene en el Excel
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                Cada activo trae su propia ubicación en columnas. Las mapeas aquí abajo.
+              </p>
+            </button>
+          </div>
+
+          {/* Aviso para ubicación única */}
+          {modoUbicacion === 'unica' && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-start gap-3">
+              <MdLocationOn className="text-green-600 shrink-0 mt-0.5" size={20} />
+              <p className="text-sm text-green-800">
+                Asignarás <strong>Local, Área y Oficina</strong> para toda la carga en el siguiente paso.
+                No necesitas columnas de ubicación en el Excel.
+              </p>
             </div>
           )}
 
-          {tieneUbicacion && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <p className="text-sm text-green-800 font-medium">
-                ✓ Ubicación completa. Los activos tomarán su ubicación del Excel.
-              </p>
+          {/* Selects de ubicación SOLO si la ubicación viene en el Excel */}
+          {modoUbicacion === 'excel' && (
+            <div className="space-y-3">
+              {camposUbicacion.map((campo) => (
+                <div key={campo.key} className="flex items-center gap-4 bg-white p-3 rounded-lg border border-blue-200">
+                  <div className="w-1/3">
+                    <p className="font-bold text-gray-800 flex items-center gap-2">
+                      {campo.label}
+                      <span className="text-red-500 text-xs flex items-center gap-1">
+                        <MdPriorityHigh size={14} /> Requerido
+                      </span>
+                    </p>
+                    <p className="text-xs text-gray-400 font-mono">DB: {campo.key}</p>
+                  </div>
+
+                  <div className="flex-1">
+                    <select
+                      value={mapeo[campo.key] || ''}
+                      onChange={(e) => onMapeoChange(campo.key, e.target.value)}
+                      className={`w-full px-3 py-2.5 border-2 rounded-lg outline-none transition ${
+                        !mapeo[campo.key]
+                          ? 'border-red-300 bg-red-50 focus:border-red-500'
+                          : 'border-green-300 bg-green-50 focus:border-green-500'
+                      }`}
+                    >
+                      <option value="">-- Seleccionar columna --</option>
+                      {excelHeaders.map((h) => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ))}
+
+              {tieneUbicacion ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <p className="text-sm text-green-800 font-medium">
+                    ✓ Ubicación completa. Los activos tomarán su ubicación del Excel.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 flex items-start gap-3">
+                  <MdWarning className="text-amber-600 shrink-0 mt-0.5" size={20} />
+                  <p className="text-sm text-amber-800">
+                    Debe mapear <strong>Local</strong>, <strong>Área</strong> y <strong>Oficina</strong> desde las columnas del Excel.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
