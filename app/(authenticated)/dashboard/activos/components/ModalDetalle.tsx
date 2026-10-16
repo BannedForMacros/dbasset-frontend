@@ -81,6 +81,9 @@ export default function ModalDetalle({ open, onClose, activo }: Props) {
 
             {/* Técnicos */}
             <InfoSection icon={<MdBuild size={18}/>} title="Detalles Técnicos">
+              <InfoRow label="EPC"    value={activo.epc || 'Sin tag'} mono />
+              <InfoRow label="Categoría" value={activo.categoria || '—'} />
+              <InfoRow label="Situación" value={activo.situacion === 'INACTIVO' ? 'Inactivo (dado de baja)' : 'Activo'} />
               <InfoRow label="Marca"  value={activo.marca  || '—'} />
               <InfoRow label="Modelo" value={activo.modelo || '—'} />
               <InfoRow label="Serie"  value={activo.serie  || '—'} mono />

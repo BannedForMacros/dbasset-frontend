@@ -20,6 +20,7 @@ export interface FormData {
   modelo: string; serie: string; color: string; anio: string;
   fechaCompra: string; codCarga: string; codLocal: string;
   codArea: string; codOficina: string; codResponsable: string; codEstado: string;
+  epc: string; categoria: string;
 }
 
 interface Props {
@@ -38,7 +39,8 @@ interface Props {
 const initialForm: FormData = {
   codActivo: '', codInterno: '', descripcion: '', marca: '', modelo: '',
   serie: '', color: '', anio: '', fechaCompra: '', codCarga: '',
-  codLocal: '', codArea: '', codOficina: '', codResponsable: '', codEstado: ''
+  codLocal: '', codArea: '', codOficina: '', codResponsable: '', codEstado: '',
+  epc: '', categoria: ''
 };
 
 export default function ModalActivo({
@@ -67,6 +69,8 @@ export default function ModalActivo({
         codOficina:     (editingActivo.oficina as Oficina)?.codOficina?.toString() || '',
         codResponsable: (editingActivo.responsable as Responsable)?.codResponsable?.toString() || '',
         codEstado:      (editingActivo.estado as Estado)?.codEstado?.toString() || '',
+        epc:            editingActivo.epc || '',
+        categoria:      editingActivo.categoria || '',
       });
     } else {
       setFormData(initialForm);
@@ -202,6 +206,32 @@ export default function ModalActivo({
                     className={inputCls}
                     style={inputStyle}
                   />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <FieldLabel>EPC (tag RFID)</FieldLabel>
+                    <input
+                      value={formData.epc}
+                      onChange={e => set('epc')(e.target.value)}
+                      onFocus={inputFocus} onBlur={inputBlur}
+                      // Al editar, el EPC se cambia desde «Vincular EPC» para no borrarlo por accidente
+                      disabled={!!editingActivo}
+                      placeholder="Opcional · escriba o escanee"
+                      className={inputCls}
+                      style={{ ...inputStyle, fontFamily: 'monospace' }}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>Categoría</FieldLabel>
+                    <input
+                      value={formData.categoria}
+                      onChange={e => set('categoria')(e.target.value)}
+                      onFocus={inputFocus} onBlur={inputBlur}
+                      placeholder="Cómputo, mobiliario…"
+                      className={inputCls}
+                      style={inputStyle}
+                    />
+                  </div>
                 </div>
               </SectionBox>
 

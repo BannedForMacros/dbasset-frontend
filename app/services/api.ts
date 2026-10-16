@@ -27,7 +27,12 @@ api.interceptors.request.use(
           // 2. Tenant ID (Obligatorio para saber qué empresa ver)
           if (user.currentCompanyId) {
             config.headers['X-Tenant-ID'] = user.currentCompanyId;
-          } 
+          }
+
+          // 3. Usuario que hace la acción (auditoría de bajas, transferencias, inventarios)
+          if (user.codPersona && user.rol === 'ADMIN') {
+            config.headers['X-User-ID'] = user.codPersona;
+          }
 
         } catch (e) {
           console.error('Error leyendo sesión:', e);

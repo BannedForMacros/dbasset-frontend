@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { activoService, Activo } from '../../../services/activo.service';
 import { cargaService, Carga, DetalleCarga as DetalleCargaType } from '../../../services/carga.service';
 import { localService, Local } from '../../../services/local.service';
@@ -17,7 +18,7 @@ import {
   MdInventory, MdFilterList, MdSearch, MdClear,
   MdLayers, MdMeetingRoom, MdInsertDriveFile, MdInfo,
   MdVisibility, MdDelete, MdLocationOn, MdDownload,
-  MdDraw, MdPendingActions, MdAssignment, MdSwapHoriz,
+  MdDraw, MdPendingActions, MdAssignment, MdSwapHoriz, MdManageSearch,
 } from 'react-icons/md';
 
 import Select from '../../../components/Select';
@@ -129,6 +130,7 @@ function ActivoRow({ item, index, onView, onDelete, onHistorial }: {
   onView: () => void; onDelete: () => void; onHistorial: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const router  = useRouter();
   const estado  = item.estado as Estado | undefined;
   const local   = item.local as Local | undefined;
   const area    = item.area as Area | undefined;
@@ -161,6 +163,13 @@ function ActivoRow({ item, index, onView, onDelete, onHistorial }: {
             <p className="font-semibold text-sm leading-tight" style={{ color: '#0f172a' }}>{item.descripcion}</p>
             <span className="text-xs font-mono px-1.5 py-0.5 rounded mt-1 inline-block"
               style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}>{item.codActivo}</span>
+            {item.epc && (
+              <span className="text-xs font-mono px-1.5 py-0.5 rounded mt-1 ml-1 inline-block" title="EPC del tag RFID"
+                style={{ backgroundColor: 'rgba(34,196,161,0.08)', color: '#0f766e' }}>RFID</span>
+            )}
+            {item.situacion === 'INACTIVO' && (
+              <span className="ml-1 inline-block"><Badge label="Baja" type="bad" /></span>
+            )}
           </div>
         </div>
       </td>
@@ -196,6 +205,10 @@ function ActivoRow({ item, index, onView, onDelete, onHistorial }: {
       <td className="px-5 py-3.5">
         <div className="flex items-center gap-1">
           <IconButton variant="view"   icon={<MdVisibility size={17} />} title="Ver detalles"           onClick={onView} />
+          {item.id && (
+            <IconButton variant="edit" icon={<MdManageSearch size={17} />} title="Ficha completa (historial, fotos)"
+              onClick={() => router.push(`/dashboard/busqueda?id=${item.id}`)} />
+          )}
           {item.modificado === 1 && (
             <IconButton variant="view" icon={<MdSwapHoriz size={17} />} title="Historial reubicaciones" onClick={onHistorial} />
           )}
@@ -374,7 +387,7 @@ export default function ActivosPage() {
       f = f.filter(i =>
         i.codActivo.toLowerCase().includes(t) || i.descripcion.toLowerCase().includes(t) ||
         (i.marca ?? '').toLowerCase().includes(t) || (i.modelo ?? '').toLowerCase().includes(t) ||
-        (i.serie ?? '').toLowerCase().includes(t)
+        (i.serie ?? '').toLowerCase().includes(t) || (i.epc ?? '').toLowerCase().includes(t)
       );
     }
     return f;
@@ -399,6 +412,7 @@ export default function ActivosPage() {
       descripcion: formData.descripcion, marca: formData.marca, modelo: formData.modelo,
       serie: formData.serie, color: formData.color, anio: formData.anio,
       fechaCompra: formData.fechaCompra, codCarga: Number(formData.codCarga),
+      epc: formData.epc.trim() || undefined, categoria: formData.categoria.trim() || undefined,
       local:       { codLocal:       Number(formData.codLocal) },
       area:        { codArea:        Number(formData.codArea) },
       oficina:     { codOficina:     Number(formData.codOficina) },
@@ -410,7 +424,11 @@ export default function ActivosPage() {
       else           await activoService.crear(payload);
       setShowModal(false); setEditingActivo(null);
       setActivos(await activoService.listarTodos());
-    } catch { alert('Error al guardar.'); }
+    } catch (e) {
+      // El backend devuelve el motivo como texto (p. ej. código o EPC repetido)
+      const d = (e as { response?: { data?: unknown } })?.response?.data;
+      alert(typeof d === 'string' && d ? `Error al guardar: ${d}` : 'Error al guardar.');
+    }
   };
 
   const handleDelete = async (id: number) => {

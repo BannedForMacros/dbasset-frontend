@@ -8,7 +8,8 @@ import {
   MdDashboard, MdLogout, MdMenu, MdClose,
   MdPeople, MdInfo, MdQrCode, MdLocalShipping, MdSettings, MdSwapHoriz,
   MdExpandMore, MdExpandLess, MdBuild, MdColorLens, MdBrandingWatermark,
-  MdAssignmentInd
+  MdAssignmentInd, MdSensors, MdLink, MdCompareArrows, MdRemoveCircleOutline,
+  MdManageSearch, MdAssessment
 } from 'react-icons/md';
 import { IconType } from 'react-icons';
 
@@ -42,6 +43,15 @@ export default function Sidebar() {
     { name: 'Configuración',   path: '/dashboard/config-organizacional', icon: MdSettings      },
     { name: 'Custodios',       path: '/dashboard/responsables',          icon: MdPeople        },
     { name: 'Inventariadores', path: '/dashboard/inventariador',         icon: MdAssignmentInd },
+  ];
+
+  const rfidItems: MenuItem[] = [
+    { name: 'Inventario RFID', path: '/dashboard/rfid/inventarios', icon: MdSensors             },
+    { name: 'Vincular EPC',    path: '/dashboard/rfid/vincular',    icon: MdLink                },
+    { name: 'Transferencias',  path: '/dashboard/transferencias',   icon: MdCompareArrows       },
+    { name: 'Bajas',           path: '/dashboard/bajas',            icon: MdRemoveCircleOutline },
+    { name: 'Búsqueda',        path: '/dashboard/busqueda',         icon: MdManageSearch        },
+    { name: 'Reportes',        path: '/dashboard/reportes',         icon: MdAssessment          },
   ];
 
   const mantenedorItems: MenuItem[] = [
@@ -150,6 +160,30 @@ export default function Sidebar() {
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.path;
+            return (
+              <button
+                key={item.path}
+                onClick={() => router.push(item.path)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 text-sm font-medium"
+                style={navBtn(isActive)}
+                onMouseEnter={e => { if (!isActive) hoverIn(e.currentTarget, c.hoverItem, '#fff'); }}
+                onMouseLeave={e => { if (!isActive) hoverOut(e.currentTarget, false); }}
+              >
+                <Icon size={20} style={{ color: isActive ? c.accent : c.mutedText }} />
+                <span>{item.name}</span>
+              </button>
+            );
+          })}
+
+          {/* Gestión de activos con RFID */}
+          <p className="px-3 pt-3 pb-2 text-xs font-semibold uppercase tracking-widest"
+            style={{ color: c.sectionLabel }}>
+            Gestión RFID
+          </p>
+
+          {rfidItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.path || pathname.startsWith(item.path + '/');
             return (
               <button
                 key={item.path}
