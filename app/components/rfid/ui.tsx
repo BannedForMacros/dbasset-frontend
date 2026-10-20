@@ -91,9 +91,9 @@ export function ModalBase({ abierto, titulo, subtitulo, onCerrar, children, pie,
 }) {
   if (!abierto) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto animate-overlay-in"
       style={{ backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
-      <div className={`w-full ${ancho} my-8 rounded-2xl overflow-hidden flex flex-col`}
+      <div className={`w-full ${ancho} my-8 rounded-2xl overflow-hidden flex flex-col animate-fade-up`}
         style={{ backgroundColor: '#fff', boxShadow: '0 25px 60px rgba(0,0,0,0.15)', maxHeight: '90vh' }}>
         <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
           style={{ background: 'linear-gradient(135deg, #003366 0%, #1e4786 100%)' }}>
