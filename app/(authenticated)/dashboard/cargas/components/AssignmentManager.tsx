@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { MdAdd, MdDelete, MdPerson, MdAutoFixHigh, MdTouchApp, MdInput, MdCheckCircle, MdWarning } from 'react-icons/md';
+import Select from '@/app/components/Select';
 
 interface Assignment {
   inicio: number;
@@ -193,14 +194,12 @@ export default function AssignmentManager({
             <div className="flex flex-wrap gap-4 items-end">
               <div className="flex-1 min-w-[200px]">
                 <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">1. Elige a la persona</label>
-                <select 
+                <Select 
                   value={selectedPerson} 
-                  onChange={e => setSelectedPerson(e.target.value)}
-                  className="w-full p-3 bg-white border-2 border-gray-300 rounded-lg text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                >
-                  <option value="">Selecciona aquí...</option>
-                  {persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                  onChange={v => setSelectedPerson(v)}
+                  placeholder="Selecciona aquí..."
+                  options={persons.map(p => ({ value: p.id, label: p.name }))}
+                />
               </div>
               <div className="w-24">
                 <label className="text-xs font-bold text-gray-500 uppercase mb-1 block text-center">Desde fila</label>
