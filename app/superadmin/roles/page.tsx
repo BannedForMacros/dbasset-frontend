@@ -6,8 +6,9 @@ import {
   MdAdd, MdCheck, MdDeleteOutline, MdLock, MdRefresh, MdSave, MdSettings,
 } from 'react-icons/md';
 import {
-  Card, Boton, Campo, ModalBase, Pastilla, inputCls, inputStyle, useAviso, COLORES,
+  Card, Boton, Campo, ModalBase, Pastilla, useAviso, COLORES,
 } from '@/app/components/rfid/ui';
+import Input from '@/app/components/Input';
 import AdminHeader from '../components/AdminHeader';
 import { authService } from '@/app/services/auth.service';
 import { superadminService, RolAdmin, PermisoAdmin } from '@/app/services/superadmin.service';
@@ -230,14 +231,13 @@ export default function RolesPermisosPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Campo etiqueta="Nombre" requerido>
-                    <input value={nombre} disabled={rol.esSistema}
+                    <Input value={nombre} disabled={rol.esSistema}
                       onChange={e => setNombre(e.target.value.toUpperCase())}
-                      className={`${inputCls} font-mono`} style={{ ...inputStyle, backgroundColor: rol.esSistema ? '#f8fafc' : '#fff' }}
-                      maxLength={50} />
+                      className="font-mono" maxLength={50} />
                   </Campo>
                   <Campo etiqueta="Descripción">
-                    <input value={descripcion} onChange={e => setDescripcion(e.target.value)}
-                      className={inputCls} style={inputStyle} maxLength={255} placeholder="Para qué sirve este rol" />
+                    <Input value={descripcion} onChange={e => setDescripcion(e.target.value)}
+                      maxLength={255} placeholder="Para qué sirve este rol" />
                   </Campo>
                 </div>
 
@@ -320,14 +320,14 @@ export default function RolesPermisosPage() {
         {nuevoRol && (
           <>
             <Campo etiqueta="Nombre" requerido>
-              <input value={nuevoRol.nombre} autoFocus
+              <Input value={nuevoRol.nombre} autoFocus
                 onChange={e => setNuevoRol(r => r && ({ ...r, nombre: e.target.value.toUpperCase() }))}
-                className={`${inputCls} font-mono`} style={inputStyle} maxLength={50} placeholder="SUPERVISOR" />
+                className="font-mono" maxLength={50} placeholder="SUPERVISOR" />
             </Campo>
             <Campo etiqueta="Descripción">
-              <input value={nuevoRol.descripcion}
+              <Input value={nuevoRol.descripcion}
                 onChange={e => setNuevoRol(r => r && ({ ...r, descripcion: e.target.value }))}
-                className={inputCls} style={inputStyle} maxLength={255} placeholder="Qué puede hacer este rol" />
+                maxLength={255} placeholder="Qué puede hacer este rol" />
             </Campo>
             <p className="text-xs" style={{ color: COLORES.tenue }}>
               Los roles del sistema (ADMIN y AUDITOR) no se pueden eliminar; sus permisos sí se pueden ajustar.
