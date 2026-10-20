@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  MdAdd, MdCheck, MdDeleteOutline, MdEdit, MdLock, MdSave, MdSettings,
+  MdAdd, MdCheck, MdDeleteOutline, MdLock, MdRefresh, MdSave, MdSettings,
 } from 'react-icons/md';
 import {
   Card, Boton, Campo, ModalBase, Pastilla, inputCls, inputStyle, useAviso, COLORES,
@@ -297,7 +297,7 @@ export default function RolesPermisosPage() {
 
                 <div className="flex flex-wrap justify-end gap-2 pt-1">
                   <Boton variante="secundario" onClick={descartar} disabled={guardando}>
-                    <MdEdit /> Descartar cambios
+                    <MdRefresh /> Descartar cambios
                   </Boton>
                   <Boton onClick={guardar} disabled={guardando}>
                     <MdSave /> {guardando ? 'Guardando…' : 'Guardar rol y permisos'}
