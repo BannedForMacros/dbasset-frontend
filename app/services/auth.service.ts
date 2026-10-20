@@ -22,8 +22,11 @@ export interface LoginResponse {
   nombreCompleto: string;
   tipoUsu: number;
   empresas: Empresa[];
-  authHeader?: string; 
+  authHeader?: string;
   currentCompanyId?: number;
+  codPersona?: number;
+  rol?: string;
+  esSuperadmin?: boolean;
 }
 
 export type UserData = LoginResponse;
@@ -68,6 +71,17 @@ export const authService = {
       localStorage.setItem('dbasset_user', JSON.stringify(data));
     }
   },
+
+  // El superadmin crea empresas después de iniciar sesión: refresca la lista guardada
+  actualizarEmpresas: (empresas: Empresa[]): void => {
+    const data = authService.getUserData();
+    if (data) {
+      data.empresas = empresas;
+      authService.saveSession(data);
+    }
+  },
+
+  esSuperadmin: (): boolean => !!authService.getUserData()?.esSuperadmin,
 
   // Método de compatibilidad (alias)
   saveUserData: (data: LoginResponse): void => {

@@ -27,7 +27,9 @@ export default function LoginPage() {
 
     try {
       const response = await authService.login({ username, password });
-      if (response.currentCompanyId) {
+      if (response.esSuperadmin) {
+        router.replace('/superadmin');
+      } else if (response.currentCompanyId) {
         router.replace('/dashboard');
       } else {
         router.replace('/select-company');

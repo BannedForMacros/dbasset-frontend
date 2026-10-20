@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { authService, LoginResponse, Empresa } from '../services/auth.service';
 import Image from 'next/image';
-import { LogOut, PlusCircle, LayoutDashboard, Loader2 } from 'lucide-react';
+import { LogOut, LayoutDashboard, Loader2 } from 'lucide-react';
 
 // Importamos tus componentes personalizados
 import { Button } from '../components/Button';
@@ -31,12 +31,18 @@ export default function SelectCompanyPage() {
       }
 
       setUser(userData);
-      
+
+      // El superadmin no tiene empresas: solo administra empresas y usuarios
+      if (userData.esSuperadmin) {
+        router.replace('/superadmin');
+        return;
+      }
+
       // Verificamos si NO tiene empresas asignadas
       if (!userData.empresas || userData.empresas.length === 0) {
         setShowNoCompanyModal(true);
       }
-      
+
       setLoading(false);
     }, 0);
 
@@ -53,9 +59,6 @@ export default function SelectCompanyPage() {
     router.replace('/login');
   };
 
-  const handleCreateCompany = () => {
-    router.push('/create-company'); 
-  };
 
   // Spinner de carga inicial elegante
   if (loading) {
@@ -122,10 +125,6 @@ export default function SelectCompanyPage() {
 
           {/* Botones de Acción */}
           <div className="flex flex-col sm:flex-row gap-4 w-full max-w-lg justify-center">
-             <Button variant="flat-blue" fullWidth onClick={handleCreateCompany}>
-                <PlusCircle size={20} />
-                Crear Nueva Empresa
-             </Button>
 
              <Button variant="flat-red" fullWidth onClick={handleLogout}>
                 <LogOut size={20} />
@@ -154,15 +153,11 @@ export default function SelectCompanyPage() {
             Aún no tienes empresas
           </h2>
           <p className="text-gray-600 mb-8 text-sm leading-relaxed px-4">
-            Para acceder al panel de control y gestionar activos, es necesario que registres tu primera organización.
+            Tu usuario todavía no está asociado a ninguna empresa. Pide al superadministrador que te asigne una.
           </p>
 
           <div className="w-full space-y-3">
-            <Button variant="primary" fullWidth onClick={handleCreateCompany}>
-              Crear mi primera empresa
-            </Button>
-            
-            <button 
+            <button
               onClick={handleLogout}
               className="w-full py-3 text-sm text-gray-400 hover:text-red-500 transition-colors font-medium"
             >
