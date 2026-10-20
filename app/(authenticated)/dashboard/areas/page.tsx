@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { areaService, Area } from '../../../services/area.service';
 import { localService, Local } from '../../../services/local.service'; // Necesitamos esto para llenar el Select
+import Select from '@/app/components/Select';
 import { MdAdd, MdEdit, MdDelete, MdSearch } from 'react-icons/md';
 
 export default function AreasPage() {
@@ -185,19 +186,12 @@ export default function AreasPage() {
               {/* Selector de Local */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Local *</label>
-                <select
+                <Select
                   value={formData.codLocal}
-                  onChange={(e) => setFormData({ ...formData, codLocal: e.target.value })}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white"
-                >
-                  <option value="">-- Seleccione un Local --</option>
-                  {locales.map((loc) => (
-                    <option key={loc.codLocal} value={loc.codLocal}>
-                      {loc.nombreLocal}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => setFormData({ ...formData, codLocal: v })}
+                  placeholder="-- Seleccione un Local --"
+                  options={locales.map((loc) => ({ value: loc.codLocal ?? '', label: loc.nombreLocal }))}
+                />
               </div>
 
               <div>
