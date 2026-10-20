@@ -10,6 +10,7 @@ import {
   MdLocationOn, MdFilterList, MdClose, MdSave,
   MdSearch, MdClear, MdLayers, MdMeetingRoom, MdDomain
 } from 'react-icons/md';
+import Select from '@/app/components/Select';
 
 // --- COMPONENTE AVATAR SIMPLE ---
 const UserAvatar = ({ name }: { name: string }) => {
@@ -241,14 +242,13 @@ export default function ResponsablesPage() {
         
         <div className="flex items-center gap-2 w-full md:w-auto">
           <MdFilterList className="text-gray-400"/>
-          <select 
+          <Select
             value={filtroLocal}
-            onChange={e => setFiltroLocal(e.target.value)}
-            className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500"
-          >
-            <option value="">Todas las Sedes</option>
-            {locales.map(l => <option key={l.codLocal} value={l.codLocal}>{l.nombreLocal}</option>)}
-          </select>
+            onChange={v => setFiltroLocal(v)}
+            placeholder="Todas las Sedes"
+            className="w-full md:w-64"
+            options={locales.map(l => ({ value: l.codLocal ?? '', label: l.nombreLocal }))}
+          />
         </div>
       </div>
 
@@ -373,38 +373,35 @@ export default function ResponsablesPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1">1. Local</label>
-                      <select 
+                      <Select
                         value={formData.tempLocal}
-                        onChange={e => setFormData({...formData, tempLocal: e.target.value, tempArea: '', tempOficina: ''})}
-                        className="w-full px-2 py-2 border border-gray-300 rounded text-sm outline-none focus:border-blue-500"
-                      >
-                        <option value="">Seleccionar Local</option>
-                        {locales.map(l => <option key={l.codLocal} value={l.codLocal}>{l.nombreLocal}</option>)}
-                      </select>
+                        onChange={v => setFormData({...formData, tempLocal: v, tempArea: '', tempOficina: ''})}
+                        placeholder="Seleccionar Local"
+                        size="sm"
+                        options={locales.map(l => ({ value: l.codLocal ?? '', label: l.nombreLocal }))}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1">2. Área</label>
-                      <select 
+                      <Select
                         value={formData.tempArea}
-                        onChange={e => setFormData({...formData, tempArea: e.target.value, tempOficina: ''})}
+                        onChange={v => setFormData({...formData, tempArea: v, tempOficina: ''})}
                         disabled={!formData.tempLocal}
-                        className="w-full px-2 py-2 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 disabled:bg-gray-100"
-                      >
-                        <option value="">Seleccionar Área</option>
-                        {areasParaForm.map(a => <option key={a.codArea} value={a.codArea}>{a.nombreArea}</option>)}
-                      </select>
+                        placeholder="Seleccionar Área"
+                        size="sm"
+                        options={areasParaForm.map(a => ({ value: a.codArea ?? '', label: a.nombreArea }))}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1">3. Oficina</label>
-                      <select 
+                      <Select
                         value={formData.tempOficina}
-                        onChange={e => setFormData({...formData, tempOficina: e.target.value})}
+                        onChange={v => setFormData({...formData, tempOficina: v})}
                         disabled={!formData.tempArea}
-                        className="w-full px-2 py-2 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 disabled:bg-gray-100"
-                      >
-                        <option value="">Seleccionar Oficina</option>
-                        {oficinasParaForm.map(o => <option key={o.codOficina} value={o.codOficina}>{o.nombreOficina}</option>)}
-                      </select>
+                        placeholder="Seleccionar Oficina"
+                        size="sm"
+                        options={oficinasParaForm.map(o => ({ value: o.codOficina ?? '', label: o.nombreOficina }))}
+                      />
                     </div>
                   </div>
                   <button 
