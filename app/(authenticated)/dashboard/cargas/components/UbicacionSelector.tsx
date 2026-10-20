@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { MdLocationOn, MdWarning } from 'react-icons/md';
+import Select from '@/app/components/Select';
 import { Local } from '../../../../services/local.service';
 import { Area } from '../../../../services/area.service';
 import { Oficina } from '../../../../services/oficina.service';
@@ -75,57 +76,45 @@ export default function UbicacionSelector({
             <label className="block text-sm font-bold text-gray-700 mb-2">
               Local <span className="text-red-500">*</span>
             </label>
-            <select
+            <Select
               value={selectedLocal}
-              onChange={(e) => {
-                setSelectedLocal(e.target.value);
+              onChange={(v) => {
+                setSelectedLocal(v);
                 setSelectedArea('');
                 setSelectedOficina('');
               }}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              <option value="">Seleccionar Local</option>
-              {locales.map(l => (
-                <option key={l.codLocal} value={l.codLocal}>{l.nombreLocal}</option>
-              ))}
-            </select>
+              placeholder="Seleccionar Local"
+              options={locales.map(l => ({ value: l.codLocal ?? '', label: l.nombreLocal }))}
+            />
           </div>
 
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-2">
               Área <span className="text-red-500">*</span>
             </label>
-            <select
+            <Select
               value={selectedArea}
-              onChange={(e) => {
-                setSelectedArea(e.target.value);
+              onChange={(v) => {
+                setSelectedArea(v);
                 setSelectedOficina('');
               }}
               disabled={!selectedLocal}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
-            >
-              <option value="">Seleccionar Área</option>
-              {areasFiltered.map(a => (
-                <option key={a.codArea} value={a.codArea}>{a.nombreArea}</option>
-              ))}
-            </select>
+              placeholder="Seleccionar Área"
+              options={areasFiltered.map(a => ({ value: a.codArea ?? '', label: a.nombreArea }))}
+            />
           </div>
 
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-2">
               Oficina <span className="text-red-500">*</span>
             </label>
-            <select
+            <Select
               value={selectedOficina}
-              onChange={(e) => setSelectedOficina(e.target.value)}
+              onChange={(v) => setSelectedOficina(v)}
               disabled={!selectedArea}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
-            >
-              <option value="">Seleccionar Oficina</option>
-              {oficinasFiltered.map(o => (
-                <option key={o.codOficina} value={o.codOficina}>{o.nombreOficina}</option>
-              ))}
-            </select>
+              placeholder="Seleccionar Oficina"
+              options={oficinasFiltered.map(o => ({ value: o.codOficina ?? '', label: o.nombreOficina }))}
+            />
           </div>
         </div>
 
