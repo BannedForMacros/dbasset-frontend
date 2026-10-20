@@ -95,10 +95,27 @@ export const authService = {
   /** Permisos (módulo.acción) del rol del usuario en la empresa seleccionada. */
   permisos: (): string[] => authService.empresaActual()?.permisos ?? [],
 
+  /** Vuelve a pedir al backend los permisos del rol en la empresa actual y actualiza la sesión. */
+  refrescarPermisos: async (): Promise<void> => {
+    const sesion = authService.getUserData();
+    if (!sesion?.authHeader || !sesion.currentCompanyId) return;
+    try {
+      const { data } = await api.get<{ codEmpresa: number; codRol?: number; rol: string; permisos: string[] }>('/auth/permisos');
+      const empresas = (sesion.empresas ?? []).map(e =>
+        e.codEmpresa === data.codEmpresa ? { ...e, ...data } : e);
+      authService.saveSession({ ...sesion, empresas });
+    } catch {
+      // Sin conexión o sesión vencida: se conservan los permisos ya guardados.
+    }
+  },
+
   /** true si el rol del usuario en la empresa actual incluye el permiso indicado. */
   puede: (codigo: string): boolean => {
     if (authService.esSuperadmin()) return false;
-    const permisos = authService.permisos();
+    const empresa = authService.empresaActual();
+    // Sesión creada antes de existir los permisos: se deja pasar y el backend decide.
+    if (!empresa || !Array.isArray(empresa.permisos)) return true;
+    const permisos = empresa.permisos;
     return permisos.includes('*') || permisos.includes(codigo);
   },
 
