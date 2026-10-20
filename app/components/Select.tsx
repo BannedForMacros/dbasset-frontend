@@ -1,125 +1,250 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { MdExpandMore, MdCheck } from 'react-icons/md';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { MdCheck, MdClose, MdExpandMore, MdSearch } from 'react-icons/md';
 
-interface SelectOption {
+export interface SelectOption {
   value: string | number;
   label: string;
+  disabled?: boolean;
 }
 
 interface SelectProps {
   options: SelectOption[];
-  value: string | number;
+  value?: string | number | null;
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
   label?: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   required?: boolean;
+  /** Permite escribir para filtrar las opciones (activado por defecto). */
+  searchable?: boolean;
+  /** Muestra la opción para vaciar el valor (activado por defecto). */
+  clearable?: boolean;
+  className?: string;
+  emptyText?: string;
+  size?: 'sm' | 'md';
+  ariaLabel?: string;
+  /** Colorea el borde para validaciones (rojo/verde). */
+  estado?: 'ok' | 'error';
 }
 
+interface PanelPos {
+  left: number;
+  width: number;
+  top?: number;
+  bottom?: number;
+  maxHeight: number;
+  arriba: boolean;
+}
+
+/**
+ * Selector del sistema: mismo aspecto para toda la app, con búsqueda,
+ * animación de apertura y navegación con teclado. Se dibuja en un portal
+ * para que no lo recorte ningún modal con scroll.
+ */
 export default function Select({
-  options, value, onChange, placeholder = 'Seleccionar...', 
-  disabled = false, label, icon, required
+  options, value, onChange, placeholder = 'Seleccionar...', disabled = false,
+  label, icon, required, searchable = true, clearable = true, className = '',
+  emptyText = 'Sin resultados', size = 'md', ariaLabel, estado,
 }: SelectProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [busqueda, setBusqueda] = useState('');
+  const [indice, setIndice] = useState(0);
+  const [pos, setPos] = useState<PanelPos | null>(null);
 
-  const selected = options.find(o => String(o.value) === String(value));
+  const botonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const seleccionado = options.find(o => String(o.value) === String(value ?? ''));
+
+  const filtradas = useMemo(() => {
+    const t = busqueda.trim().toLowerCase();
+    return t ? options.filter(o => o.label.toLowerCase().includes(t)) : options;
+  }, [options, busqueda]);
+
+  const cerrar = () => {
+    setOpen(false);
+    setBusqueda('');
+  };
+
+  const abrir = () => {
+    if (disabled) return;
+    const r = botonRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const margen = 8;
+    const espacioAbajo = window.innerHeight - r.bottom;
+    const espacioArriba = r.top;
+    const arriba = espacioAbajo < 300 && espacioArriba > espacioAbajo;
+    const disponible = (arriba ? espacioArriba : espacioAbajo) - margen * 2;
+    const ancho = Math.max(r.width, Math.min(230, window.innerWidth - margen * 2));
+    setPos({
+      left: Math.max(margen, Math.min(r.left, window.innerWidth - ancho - margen)),
+      width: ancho,
+      top: arriba ? undefined : r.bottom + 6,
+      bottom: arriba ? window.innerHeight - r.top + 6 : undefined,
+      maxHeight: Math.max(180, Math.min(340, disponible)),
+      arriba,
+    });
+    setBusqueda('');
+    setIndice(0);
+    setOpen(true);
+  };
+
+  // Cerrar al hacer clic fuera, al hacer scroll de la página o al redimensionar
+  useEffect(() => {
+    if (!open) return;
+    const alClicFuera = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (panelRef.current?.contains(t) || botonRef.current?.contains(t)) return;
+      cerrar();
+    };
+    const alScroll = (e: Event) => {
+      const t = e.target;
+      if (t instanceof Node && panelRef.current?.contains(t)) return;
+      cerrar();
+    };
+    const alRedimensionar = () => cerrar();
+
+    document.addEventListener('mousedown', alClicFuera);
+    window.addEventListener('scroll', alScroll, true);
+    window.addEventListener('resize', alRedimensionar);
+    return () => {
+      document.removeEventListener('mousedown', alClicFuera);
+      window.removeEventListener('scroll', alScroll, true);
+      window.removeEventListener('resize', alRedimensionar);
+    };
+  }, [open]);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+    if (!open) return;
+    panelRef.current?.querySelector<HTMLElement>(`[data-indice="${indice}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [indice, open]);
+
+  const elegir = (opt: SelectOption) => {
+    if (opt.disabled) return;
+    onChange(String(opt.value));
+    cerrar();
+  };
+
+  const alTeclear = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      cerrar();
+      botonRef.current?.focus();
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setIndice(i => Math.min(i + 1, Math.max(filtradas.length - 1, 0)));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setIndice(i => Math.max(i - 1, 0));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const opt = filtradas[indice];
+      if (opt) elegir(opt);
+    }
+  };
+
+  const panel = open && pos && typeof document !== 'undefined' ? createPortal(
+    <div
+      ref={panelRef}
+      className="select-panel animate-dropdown"
+      data-arriba={pos.arriba}
+      role="listbox"
+      style={{
+        position: 'fixed', left: pos.left, width: pos.width, maxHeight: pos.maxHeight,
+        top: pos.top, bottom: pos.bottom, zIndex: 1200,
+      }}
+      onKeyDown={alTeclear}
+    >
+      {searchable && (
+        <div className="select-buscador">
+          <MdSearch size={16} style={{ color: '#94a3b8', flexShrink: 0 }} />
+          <input
+            autoFocus
+            value={busqueda}
+            onChange={e => { setBusqueda(e.target.value); setIndice(0); }}
+            placeholder="Buscar…"
+            aria-label="Buscar opción"
+          />
+          {busqueda && (
+            <button type="button" onClick={() => setBusqueda('')} aria-label="Limpiar búsqueda"
+              style={{ color: '#94a3b8', display: 'flex' }}>
+              <MdClose size={15} />
+            </button>
+          )}
+        </div>
+      )}
+      <div className="select-opciones">
+        {clearable && (
+          <button type="button" className="select-opcion" onClick={() => { onChange(''); cerrar(); }}>
+            <span style={{ color: '#94a3b8' }}>{placeholder}</span>
+          </button>
+        )}
+        {filtradas.map((opt, i) => {
+          const esSeleccionado = String(opt.value) === String(value ?? '');
+          return (
+            <button
+              key={String(opt.value)}
+              type="button"
+              role="option"
+              aria-selected={esSeleccionado}
+              disabled={opt.disabled}
+              data-indice={i}
+              data-activo={i === indice}
+              data-seleccionado={esSeleccionado}
+              className="select-opcion"
+              onMouseEnter={() => setIndice(i)}
+              onClick={() => elegir(opt)}
+            >
+              <span className="truncate">{opt.label}</span>
+              {esSeleccionado && <MdCheck size={16} style={{ color: '#22c4a1', flexShrink: 0 }} />}
+            </button>
+          );
+        })}
+        {filtradas.length === 0 && <p className="select-vacio">{emptyText}</p>}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className={`flex flex-col gap-1.5 ${className}`}>
       {label && (
-        <label className="text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5" 
-          style={{ color: '#64748b' }}>
+        <label className="text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5" style={{ color: '#64748b' }}>
           {icon && <span style={{ color: '#1e4786' }}>{icon}</span>}
           {label}{required && <span style={{ color: '#ef4444' }}>*</span>}
         </label>
       )}
-      <div ref={ref} className="relative">
+      <div className="relative">
         <button
+          ref={botonRef}
           type="button"
           disabled={disabled}
-          onClick={() => !disabled && setOpen(o => !o)}
-          className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
-          style={{
-            backgroundColor: disabled ? '#f8fafc' : '#fff',
-            border: open ? '1.5px solid #1e4786' : '1.5px solid #e2e8f0',
-            color: selected ? '#0f172a' : '#94a3b8',
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            boxShadow: open ? '0 0 0 3px rgba(30,71,134,0.08)' : 'none',
-          }}
+          onClick={() => (open ? cerrar() : abrir())}
+          onKeyDown={open ? alTeclear : undefined}
+          data-abierto={open}
+          data-size={size}
+          data-estado={estado}
+          aria-label={ariaLabel ?? label}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          className="select-boton"
         >
-          <span className="truncate">{selected ? selected.label : placeholder}</span>
-          <MdExpandMore
-            size={18}
-            style={{
-              color: '#94a3b8',
-              transform: open ? 'rotate(180deg)' : 'rotate(0)',
-              transition: 'transform 0.2s',
-              flexShrink: 0,
-            }}
-          />
+          <span className="truncate" style={{ color: seleccionado ? '#0f172a' : '#94a3b8' }}>
+            {seleccionado ? seleccionado.label : placeholder}
+          </span>
+          <MdExpandMore size={18} className="select-chevron" />
         </button>
-
-        {open && (
-          <div
-            className="absolute z-50 w-full mt-1 rounded-lg overflow-hidden"
-            style={{
-              backgroundColor: '#fff',
-              border: '1.5px solid #e2e8f0',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
-              maxHeight: '220px',
-              overflowY: 'auto',
-            }}
-          >
-            {/* Opción vacía / placeholder */}
-            <div
-              onClick={() => { onChange(''); setOpen(false); }}
-              className="flex items-center justify-between px-3 py-2.5 text-sm cursor-pointer transition-colors duration-100"
-              style={{ color: '#94a3b8' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f8fafc')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-            >
-              {placeholder}
-            </div>
-            {options.map(opt => {
-              const isSelected = String(opt.value) === String(value);
-              return (
-                <div
-                  key={opt.value}
-                  onClick={() => { onChange(String(opt.value)); setOpen(false); }}
-                  className="flex items-center justify-between px-3 py-2.5 text-sm cursor-pointer transition-colors duration-100"
-                  style={{
-                    backgroundColor: isSelected ? 'rgba(30,71,134,0.06)' : 'transparent',
-                    color: isSelected ? '#1e4786' : '#0f172a',
-                    fontWeight: isSelected ? 600 : 400,
-                  }}
-                  onMouseEnter={e => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(34,196,161,0.08)';
-                    if (!isSelected) e.currentTarget.style.color = '#1e4786';
-                  }}
-                  onMouseLeave={e => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
-                    if (!isSelected) e.currentTarget.style.color = '#0f172a';
-                  }}
-                >
-                  <span className="truncate">{opt.label}</span>
-                  {isSelected && <MdCheck size={16} style={{ color: '#22c4a1', flexShrink: 0 }} />}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {panel}
       </div>
     </div>
   );
