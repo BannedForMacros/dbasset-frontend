@@ -15,3 +15,189 @@ html, body {
 .animate-shake {
   animation: shake 0.5s ease-in-out;
 }
+
+/* =====================================================================
+   Controles suaves y consistentes
+   Los formularios antiguos usan <input>/<select> nativos: con estas
+   reglas todos heredan la misma transición y anillo de foco.
+   ===================================================================== */
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  select,
+  textarea {
+    transition: border-color 0.18s ease, box-shadow 0.22s ease, background-color 0.18s ease, color 0.18s ease;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):hover:not(:disabled),
+  select:hover:not(:disabled),
+  textarea:hover:not(:disabled) {
+    border-color: #cbd5e1;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):focus,
+  select:focus,
+  textarea:focus {
+    outline: none;
+    border-color: #1e4786;
+    box-shadow: 0 0 0 3px rgba(30, 71, 134, 0.12);
+  }
+}
+
+/* Campo de texto del sistema de componentes (Input.tsx) */
+.input-suave {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.55rem;
+  background-color: #fff;
+  color: #0f172a;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  transition: border-color 0.18s ease, box-shadow 0.22s ease, background-color 0.18s ease;
+}
+.input-suave::placeholder { color: #94a3b8; }
+.input-suave:hover:not(:disabled) { border-color: #cbd5e1; }
+.input-suave:focus {
+  outline: none;
+  border-color: #1e4786;
+  box-shadow: 0 0 0 3px rgba(30, 71, 134, 0.12);
+}
+.input-suave:disabled {
+  background-color: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+.input-suave[data-error="true"] { border-color: #ef4444; }
+.input-suave[data-error="true"]:focus { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12); }
+
+/* Selector (Select.tsx) */
+.select-boton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.55rem;
+  background-color: #fff;
+  color: #0f172a;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.22s ease, background-color 0.18s ease;
+}
+.select-boton[data-size="sm"] {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  border-radius: 0.5rem;
+}
+.select-boton:hover:not(:disabled) { border-color: #cbd5e1; }
+.select-boton[data-abierto="true"] {
+  border-color: #1e4786;
+  box-shadow: 0 0 0 3px rgba(30, 71, 134, 0.12);
+}
+.select-boton[data-estado="error"] { border-color: #fca5a5; background-color: #fef2f2; }
+.select-boton[data-estado="ok"] { border-color: #86efac; background-color: #f0fdf4; }
+.select-boton[data-estado="error"]:hover:not(:disabled) { border-color: #f87171; }
+.select-boton[data-estado="ok"]:hover:not(:disabled) { border-color: #4ade80; }
+.select-boton:disabled {
+  background-color: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+.select-boton .select-chevron {
+  flex-shrink: 0;
+  color: #94a3b8;
+  transition: transform 0.22s ease, color 0.18s ease;
+}
+.select-boton[data-abierto="true"] .select-chevron { transform: rotate(180deg); color: #1e4786; }
+
+.select-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: #fff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.75rem;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
+  transform-origin: top center;
+}
+.select-panel[data-arriba="true"] { transform-origin: bottom center; }
+
+.select-buscador {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  flex-shrink: 0;
+}
+.select-buscador input {
+  width: 100%;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 0.2rem 0;
+  font-size: 0.875rem;
+  background: transparent;
+  color: #0f172a;
+}
+.select-buscador input::placeholder { color: #94a3b8; }
+
+.select-opciones {
+  overflow-y: auto;
+  padding: 0.3rem;
+}
+
+.select-opcion {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  text-align: left;
+  color: #0f172a;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.select-opcion:hover,
+.select-opcion[data-activo="true"] {
+  background-color: rgba(34, 196, 161, 0.1);
+  color: #1e4786;
+}
+.select-opcion[data-seleccionado="true"] {
+  background-color: rgba(30, 71, 134, 0.07);
+  color: #1e4786;
+  font-weight: 600;
+}
+.select-opcion:disabled { opacity: 0.5; cursor: not-allowed; }
+.select-vacio {
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  text-align: center;
+}
+
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes dropdownInArriba {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-dropdown { animation: dropdownIn 0.16s ease-out; }
+.select-panel[data-arriba="true"].animate-dropdown { animation-name: dropdownInArriba; }
+
+/* Aparición suave reutilizable */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up { animation: fadeUp 0.22s ease-out; }
