@@ -30,11 +30,22 @@ export default function Sidebar() {
   const [permisos, setPermisos] = useState<string[] | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setPermisos(authService.permisos()), 0);
-    return () => clearTimeout(t);
+    let vivo = true;
+    const cargarPermisos = async () => {
+      const empresa = authService.empresaActual();
+      if (empresa && Array.isArray(empresa.permisos)) setPermisos(empresa.permisos);
+      await authService.refrescarPermisos();
+      if (!vivo) return;
+      const actual = authService.empresaActual();
+      setPermisos(actual && Array.isArray(actual.permisos) ? actual.permisos : null);
+    };
+    cargarPermisos();
+    // Al volver a la pestaña se refrescan: el superadmin pudo cambiar los permisos del rol.
+    window.addEventListener('focus', cargarPermisos);
+    return () => { vivo = false; window.removeEventListener('focus', cargarPermisos); };
   }, []);
 
-  const visible = (item: MenuItem) => !item.permiso || (permisos ?? []).includes(item.permiso);
+  const visible = (item: MenuItem) => !item.permiso || permisos === null || permisos.includes(item.permiso);
 
   const companyInfo = (() => {
     if (typeof window === 'undefined') return { ruc: '', razonSocial: '' };
