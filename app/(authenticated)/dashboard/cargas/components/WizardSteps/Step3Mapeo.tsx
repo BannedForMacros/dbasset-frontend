@@ -1,6 +1,7 @@
 'use client';
 
 import { MdLink, MdVisibility, MdVisibilityOff, MdPriorityHigh, MdLocationOn, MdWarning } from 'react-icons/md';
+import Select from '@/app/components/Select';
 import { CampoConfig } from '../../../../../services/configuracion.service';
 
 interface Step3MapeoProps {
@@ -120,20 +121,13 @@ export default function Step3Mapeo({
                   </div>
 
                   <div className="flex-1">
-                    <select
+                    <Select
                       value={mapeo[campo.key] || ''}
-                      onChange={(e) => onMapeoChange(campo.key, e.target.value)}
-                      className={`w-full px-3 py-2.5 border-2 rounded-lg outline-none transition ${
-                        !mapeo[campo.key]
-                          ? 'border-red-300 bg-red-50 focus:border-red-500'
-                          : 'border-green-300 bg-green-50 focus:border-green-500'
-                      }`}
-                    >
-                      <option value="">-- Seleccionar columna --</option>
-                      {excelHeaders.map((h) => (
-                        <option key={h} value={h}>{h}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => onMapeoChange(campo.key, v)}
+                      placeholder="-- Seleccionar columna --"
+                      estado={!mapeo[campo.key] ? 'error' : 'ok'}
+                      options={excelHeaders.map((h) => ({ value: h, label: h }))}
+                    />
                   </div>
                 </div>
               ))}
@@ -183,20 +177,13 @@ export default function Step3Mapeo({
               </div>
 
               <div className="w-full lg:w-1/3">
-                <select
+                <Select
                   value={mapeo[campo.nombreCampoBd] || ''}
-                  onChange={(e) => onMapeoChange(campo.nombreCampoBd, e.target.value)}
-                  className={`w-full px-3 py-2.5 border-2 rounded-lg outline-none transition ${
-                    campo.esObligatorio && !mapeo[campo.nombreCampoBd]
-                      ? 'border-red-300 bg-red-50 focus:border-red-500'
-                      : 'border-gray-300 bg-white focus:border-blue-500'
-                  }`}
-                >
-                  <option value="">-- Sin mapear --</option>
-                  {excelHeaders.map((h) => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
+                  onChange={(v) => onMapeoChange(campo.nombreCampoBd, v)}
+                  placeholder="-- Sin mapear --"
+                  estado={campo.esObligatorio && !mapeo[campo.nombreCampoBd] ? 'error' : undefined}
+                  options={excelHeaders.map((h) => ({ value: h, label: h }))}
+                />
               </div>
 
               <div className="w-full lg:w-1/3 flex justify-end gap-6">
