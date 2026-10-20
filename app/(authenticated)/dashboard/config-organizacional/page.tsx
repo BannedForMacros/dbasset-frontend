@@ -21,6 +21,7 @@ import {
   MdAccountTree,
   MdFilterList
 } from 'react-icons/md';
+import Select from '@/app/components/Select';
 
 type EntityType = 'local' | 'area' | 'oficina';
 
@@ -504,38 +505,28 @@ export default function ConfigOrganizacionalPage() {
             {tableEntityType !== 'local' && (
               <div className="flex items-center gap-2 ml-auto">
                 <MdFilterList className="text-gray-500" size={18} />
-                <select
+                <Select
                   value={filtroLocalTabla}
-                  onChange={(e) => {
-                    setFiltroLocalTabla(e.target.value);
+                  onChange={(v) => {
+                    setFiltroLocalTabla(v);
                     if (tableEntityType === 'oficina') {
                       setFiltroAreaTabla('');
                     }
                   }}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                >
-                  <option value="">Todos los Locales</option>
-                  {locales.map((loc) => (
-                    <option key={loc.codLocal} value={loc.codLocal}>
-                      {loc.nombreLocal}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Todos los Locales"
+                  size="sm"
+                  options={locales.map((loc) => ({ value: loc.codLocal ?? '', label: loc.nombreLocal }))}
+                />
 
                 {tableEntityType === 'oficina' && (
-                  <select
+                  <Select
                     value={filtroAreaTabla}
-                    onChange={(e) => setFiltroAreaTabla(e.target.value)}
+                    onChange={(v) => setFiltroAreaTabla(v)}
                     disabled={!filtroLocalTabla}
-                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white disabled:bg-gray-100"
-                  >
-                    <option value="">Todas las Áreas</option>
-                    {areasParaTablaOficinas.map((area) => (
-                      <option key={area.codArea} value={area.codArea}>
-                        {area.nombreArea}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Todas las Áreas"
+                    size="sm"
+                    options={areasParaTablaOficinas.map((area) => ({ value: area.codArea ?? '', label: area.nombreArea }))}
+                  />
                 )}
 
                 {(filtroLocalTabla || filtroAreaTabla) && (
@@ -1080,20 +1071,13 @@ export default function ConfigOrganizacionalPage() {
                       )}
                     </div>
                   </label>
-                  <select
+                  <Select
                     value={formData.codLocal}
-                    onChange={(e) => setFormData({ ...formData, codLocal: e.target.value, codArea: '' })}
-                    required
+                    onChange={(v) => setFormData({ ...formData, codLocal: v, codArea: '' })}
                     disabled={!!parentContext.localId || (isEditing && (modalType === 'area' || modalType === 'oficina'))}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">-- Seleccione un Local --</option>
-                    {locales.map((loc) => (
-                      <option key={loc.codLocal} value={loc.codLocal}>
-                        {loc.nombreLocal} ({loc.codInterno})
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="-- Seleccione un Local --"
+                    options={locales.map((loc) => ({ value: loc.codLocal ?? '', label: `${loc.nombreLocal} (${loc.codInterno})` }))}
+                  />
                 </div>
               )}
 
@@ -1109,22 +1093,13 @@ export default function ConfigOrganizacionalPage() {
                       )}
                     </div>
                   </label>
-                  <select
+                  <Select
                     value={formData.codArea}
-                    onChange={(e) => setFormData({ ...formData, codArea: e.target.value })}
-                    required
+                    onChange={(v) => setFormData({ ...formData, codArea: v })}
                     disabled={!formData.codLocal || !!parentContext.areaId || isEditing}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">
-                      {formData.codLocal ? '-- Seleccione un Área --' : '-- Primero seleccione un Local --'}
-                    </option>
-                    {areasFiltradas_Form.map((area) => (
-                      <option key={area.codArea} value={area.codArea}>
-                        {area.nombreArea} ({area.codInterno})
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={formData.codLocal ? '-- Seleccione un Área --' : '-- Primero seleccione un Local --'}
+                    options={areasFiltradas_Form.map((area) => ({ value: area.codArea ?? '', label: `${area.nombreArea} (${area.codInterno})` }))}
+                  />
                 </div>
               )}
 
