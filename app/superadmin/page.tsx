@@ -2,20 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import {
-  MdBusiness, MdPeople, MdAdd, MdEdit, MdLogout, MdSearch, MdShield, MdVpnKey,
+  MdBusiness, MdPeople, MdAdd, MdEdit, MdSearch, MdShield, MdVpnKey,
+  MdSettings, MdPersonAdd, MdDeleteOutline, MdOutlineAdminPanelSettings, MdClose,
 } from 'react-icons/md';
 import { Card, Boton, Campo, ModalBase, Tabla, tdCls, Pastilla, inputCls, inputStyle, useAviso, COLORES } from '@/app/components/rfid/ui';
+import AdminHeader from './components/AdminHeader';
 import { authService } from '@/app/services/auth.service';
 import {
-  superadminService, EmpresaAdmin, UsuarioAdmin, UsuarioForm, RolEmpresa, ROLES_EMPRESA,
+  superadminService, EmpresaAdmin, UsuarioAdmin, UsuarioForm, RolAdmin,
+  UsuarioEmpresa, UsuarioDisponible,
 } from '@/app/services/superadmin.service';
 import { fmtFecha, mensajeError } from '@/app/utils/exportar';
 
-type Pestana = 'empresas' | 'usuarios';
+type EmpresaForm = { codEmpresa?: number; ruc: string; razonSocial: string; activo: boolean };
 
-const empresaVacia = { ruc: '', razonSocial: '', activo: true };
+const empresaVacia: EmpresaForm = { ruc: '', razonSocial: '', activo: true };
 const usuarioVacio: UsuarioForm = { nombreUsuario: '', clave: '', nombreCompleto: '', descripcion: '', esSuperadmin: false, activo: true };
 
 export default function SuperAdminPage() {
@@ -23,20 +25,32 @@ export default function SuperAdminPage() {
   const { mostrar, nodo } = useAviso();
   const [listo, setListo] = useState(false);
   const [miId, setMiId] = useState<number | undefined>();
-  const [pestana, setPestana] = useState<Pestana>('empresas');
-  const [empresas, setEmpresas] = useState<EmpresaAdmin[]>([]);
-  const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [cargando, setCargando] = useState(true);
   const [filtro, setFiltro] = useState('');
 
-  // Empresa en edición (null = cerrado, codEmpresa undefined = nueva)
-  const [empresaEdit, setEmpresaEdit] = useState<{ codEmpresa?: number; ruc: string; razonSocial: string; activo: boolean } | null>(null);
-  // Usuario en edición
-  const [usuarioEdit, setUsuarioEdit] = useState<(UsuarioForm & { codUsuario?: number }) | null>(null);
-  const [asignaciones, setAsignaciones] = useState<Record<number, RolEmpresa>>({});
+  const [empresas, setEmpresas] = useState<EmpresaAdmin[]>([]);
+  const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
+  const [roles, setRoles] = useState<RolAdmin[]>([]);
+
+  // Empresa en creación/edición
+  const [empresaEdit, setEmpresaEdit] = useState<EmpresaForm | null>(null);
   const [guardando, setGuardando] = useState(false);
 
-  // Solo superadministradores
+  // Empresa en gestión (usuarios de esa empresa)
+  const [gestion, setGestion] = useState<EmpresaAdmin | null>(null);
+  const [usuariosEmpresa, setUsuariosEmpresa] = useState<UsuarioEmpresa[]>([]);
+  const [disponibles, setDisponibles] = useState<UsuarioDisponible[]>([]);
+  const [cargandoGestion, setCargandoGestion] = useState(false);
+  const [panelAsignar, setPanelAsignar] = useState(false);
+  const [panelCrear, setPanelCrear] = useState(false);
+  const [asignacion, setAsignacion] = useState<{ codUsuario: number | ''; codRol: number | '' }>({ codUsuario: '', codRol: '' });
+  const [nuevoUsuario, setNuevoUsuario] = useState<UsuarioForm>(usuarioVacio);
+  const [rolNuevo, setRolNuevo] = useState<number | ''>('');
+
+  // Superadministradores
+  const [verSuperadmins, setVerSuperadmins] = useState(false);
+  const [superEdit, setSuperEdit] = useState<(UsuarioForm & { codUsuario?: number }) | null>(null);
+
   useEffect(() => {
     const t = setTimeout(() => {
       const u = authService.getUserData();
@@ -51,13 +65,24 @@ export default function SuperAdminPage() {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const [e, u] = await Promise.all([superadminService.empresas(), superadminService.usuarios()]);
-      setEmpresas(e); setUsuarios(u);
+      const [e, u, r] = await Promise.all([
+        superadminService.empresas(), superadminService.usuarios(), superadminService.roles(),
+      ]);
+      setEmpresas(e); setUsuarios(u); setRoles(r);
     } catch (err) { mostrar('error', mensajeError(err, 'No se pudo cargar la información')); }
     finally { setCargando(false); }
   }, [mostrar]);
 
   useEffect(() => { if (listo) cargar(); }, [listo, cargar]);
+
+  const rolesActivos = useMemo(() => roles.filter(r => r.activo), [roles]);
+  const superadmins = useMemo(() => usuarios.filter(u => u.esSuperadmin), [usuarios]);
+  const empresasFiltradas = useMemo(() => {
+    const t = filtro.trim().toLowerCase();
+    return t
+      ? empresas.filter(e => e.razonSocial.toLowerCase().includes(t) || e.ruc.includes(t))
+      : empresas;
+  }, [empresas, filtro]);
 
   // ── Empresas ──────────────────────────────────────────────────────────
   const guardarEmpresa = async () => {
@@ -76,154 +101,212 @@ export default function SuperAdminPage() {
     finally { setGuardando(false); }
   };
 
-  // ── Usuarios ──────────────────────────────────────────────────────────
-  const abrirUsuario = (u?: UsuarioAdmin) => {
-    if (u) {
-      setUsuarioEdit({
-        codUsuario: u.codUsuario, nombreUsuario: u.nombreUsuario, clave: '', nombreCompleto: u.nombreCompleto ?? '',
-        descripcion: u.descripcion ?? '', esSuperadmin: u.esSuperadmin, activo: u.activo,
-      });
-      setAsignaciones(Object.fromEntries(u.empresas.map(a => [a.codEmpresa, a.rol === 'AUDITOR' ? 'AUDITOR' : 'ADMIN'])));
-    } else {
-      setUsuarioEdit({ ...usuarioVacio });
-      setAsignaciones({});
-    }
+  // ── Gestión de usuarios de una empresa ────────────────────────────────
+  const abrirGestion = async (empresa: EmpresaAdmin) => {
+    setGestion(empresa);
+    setUsuariosEmpresa([]);
+    setDisponibles([]);
+    setPanelAsignar(false);
+    setPanelCrear(false);
+    setAsignacion({ codUsuario: '', codRol: rolesActivos[0]?.codRol ?? '' });
+    setNuevoUsuario(usuarioVacio);
+    setRolNuevo(rolesActivos[0]?.codRol ?? '');
+    setCargandoGestion(true);
+    try {
+      const [asignados, libres] = await Promise.all([
+        superadminService.empresaUsuarios(empresa.codEmpresa),
+        superadminService.empresaUsuariosDisponibles(empresa.codEmpresa),
+      ]);
+      setUsuariosEmpresa(asignados); setDisponibles(libres);
+    } catch (err) { mostrar('error', mensajeError(err, 'No se pudieron cargar los usuarios de la empresa')); }
+    finally { setCargandoGestion(false); }
   };
 
-  const guardarUsuario = async () => {
-    if (!usuarioEdit) return;
-    const nuevo = !usuarioEdit.codUsuario;
-    if (!usuarioEdit.nombreUsuario.trim()) { mostrar('error', 'Indique el usuario'); return; }
-    if (!usuarioEdit.nombreCompleto.trim()) { mostrar('error', 'Indique el nombre completo'); return; }
-    if (nuevo && (usuarioEdit.clave ?? '').length < 6) { mostrar('error', 'La contraseña debe tener al menos 6 caracteres'); return; }
-    if (!nuevo && usuarioEdit.clave && usuarioEdit.clave.length < 6) { mostrar('error', 'La nueva contraseña debe tener al menos 6 caracteres'); return; }
+  const refrescarGestion = async () => {
+    if (!gestion) return;
+    const [asignados, libres] = await Promise.all([
+      superadminService.empresaUsuarios(gestion.codEmpresa),
+      superadminService.empresaUsuariosDisponibles(gestion.codEmpresa),
+    ]);
+    setUsuariosEmpresa(asignados); setDisponibles(libres);
+    setEmpresas(prev => prev.map(e => e.codEmpresa === gestion.codEmpresa
+      ? { ...e, totalUsuarios: asignados.filter(u => u.activo).length }
+      : e));
+  };
+
+  const cambiarRol = async (usuario: UsuarioEmpresa, codRol: number) => {
+    if (!gestion) return;
+    try {
+      const lista = await superadminService.actualizarUsuarioEmpresa(gestion.codEmpresa, usuario.codUsuario, {
+        codRol, activo: usuario.activo,
+      });
+      setUsuariosEmpresa(lista);
+      mostrar('ok', `Rol de ${usuario.nombreUsuario} actualizado`);
+    } catch (err) { mostrar('error', mensajeError(err, 'No se pudo cambiar el rol')); }
+  };
+
+  const alternarEstado = async (usuario: UsuarioEmpresa) => {
+    if (!gestion) return;
+    try {
+      const lista = await superadminService.actualizarUsuarioEmpresa(gestion.codEmpresa, usuario.codUsuario, {
+        codRol: usuario.codRol ?? rolesActivos[0]?.codRol ?? 0, activo: !usuario.activo,
+      });
+      setUsuariosEmpresa(lista);
+      mostrar('ok', usuario.activo ? 'Acceso a la empresa desactivado' : 'Acceso a la empresa activado');
+    } catch (err) { mostrar('error', mensajeError(err, 'No se pudo cambiar el estado')); }
+  };
+
+  const quitarUsuario = async (usuario: UsuarioEmpresa) => {
+    if (!gestion) return;
+    if (!window.confirm(`¿Quitar a ${usuario.nombreCompleto} de ${gestion.razonSocial}?`)) return;
+    try {
+      const lista = await superadminService.quitarUsuarioEmpresa(gestion.codEmpresa, usuario.codUsuario);
+      await refrescarGestion();
+      setUsuariosEmpresa(lista);
+      mostrar('ok', 'Usuario quitado de la empresa');
+    } catch (err) { mostrar('error', mensajeError(err, 'No se pudo quitar el usuario')); }
+  };
+
+  const asignarExistente = async () => {
+    if (!gestion) return;
+    if (!asignacion.codUsuario) { mostrar('error', 'Seleccione un usuario'); return; }
+    if (!asignacion.codRol) { mostrar('error', 'Seleccione un rol'); return; }
     setGuardando(true);
     try {
-      const datos: UsuarioForm = { ...usuarioEdit, nombreUsuario: usuarioEdit.nombreUsuario.trim(), nombreCompleto: usuarioEdit.nombreCompleto.trim() };
-      const u = nuevo
-        ? await superadminService.crearUsuario(datos)
-        : await superadminService.actualizarUsuario(usuarioEdit.codUsuario!, datos);
-      await superadminService.asignarEmpresas(u.codUsuario, datos.esSuperadmin ? []
-        : Object.entries(asignaciones).map(([codEmpresa, rol]) => ({ codEmpresa: Number(codEmpresa), rol })));
-      mostrar('ok', nuevo ? `Usuario ${u.nombreUsuario} creado` : 'Usuario actualizado');
-      setUsuarioEdit(null);
-      await cargar();
-    } catch (err) { mostrar('error', mensajeError(err, 'No se pudo guardar el usuario')); }
+      const lista = await superadminService.asignarUsuarioEmpresa(gestion.codEmpresa, {
+        codUsuario: Number(asignacion.codUsuario), codRol: Number(asignacion.codRol),
+      });
+      setUsuariosEmpresa(lista);
+      await refrescarGestion();
+      setAsignacion({ codUsuario: '', codRol: asignacion.codRol });
+      setPanelAsignar(false);
+      mostrar('ok', 'Usuario asignado a la empresa');
+    } catch (err) { mostrar('error', mensajeError(err, 'No se pudo asignar el usuario')); }
     finally { setGuardando(false); }
   };
 
-  const alternarEmpresa = (codEmpresa: number) => setAsignaciones(a => {
-    const c = { ...a };
-    if (c[codEmpresa]) delete c[codEmpresa]; else c[codEmpresa] = 'ADMIN';
-    return c;
-  });
+  const crearUsuarioEnEmpresa = async () => {
+    if (!gestion) return;
+    if (!nuevoUsuario.nombreUsuario.trim()) { mostrar('error', 'Indique el usuario'); return; }
+    if (!nuevoUsuario.nombreCompleto.trim()) { mostrar('error', 'Indique el nombre completo'); return; }
+    if ((nuevoUsuario.clave ?? '').length < 6) { mostrar('error', 'La contraseña debe tener al menos 6 caracteres'); return; }
+    if (!rolNuevo) { mostrar('error', 'Seleccione un rol'); return; }
+    setGuardando(true);
+    try {
+      await superadminService.crearUsuarioEmpresa(gestion.codEmpresa, {
+        usuario: { ...nuevoUsuario, nombreUsuario: nuevoUsuario.nombreUsuario.trim(), nombreCompleto: nuevoUsuario.nombreCompleto.trim(), esSuperadmin: false, activo: true },
+        codRol: Number(rolNuevo),
+      });
+      await refrescarGestion();
+      setNuevoUsuario(usuarioVacio);
+      setPanelCrear(false);
+      mostrar('ok', 'Usuario creado y asignado a la empresa');
+    } catch (err) { mostrar('error', mensajeError(err, 'No se pudo crear el usuario')); }
+    finally { setGuardando(false); }
+  };
 
-  const empresasFiltradas = useMemo(() => {
-    const t = filtro.trim().toLowerCase();
-    return t ? empresas.filter(e => e.razonSocial.toLowerCase().includes(t) || e.ruc.includes(t)) : empresas;
-  }, [empresas, filtro]);
+  // ── Superadministradores ──────────────────────────────────────────────
+  const abrirFormSuper = (u?: UsuarioAdmin) => {
+    setVerSuperadmins(false);
+    setSuperEdit(u
+      ? { codUsuario: u.codUsuario, nombreUsuario: u.nombreUsuario, clave: '', nombreCompleto: u.nombreCompleto ?? '',
+          descripcion: u.descripcion ?? '', esSuperadmin: true, activo: u.activo }
+      : { ...usuarioVacio, esSuperadmin: true });
+  };
 
-  const usuariosFiltrados = useMemo(() => {
-    const t = filtro.trim().toLowerCase();
-    return t ? usuarios.filter(u => [u.nombreUsuario, u.nombreCompleto, ...u.empresas.map(e => e.razonSocial)]
-      .some(v => (v ?? '').toLowerCase().includes(t))) : usuarios;
-  }, [usuarios, filtro]);
+  const guardarSuper = async () => {
+    if (!superEdit) return;
+    const nuevo = !superEdit.codUsuario;
+    if (!superEdit.nombreUsuario.trim()) { mostrar('error', 'Indique el usuario'); return; }
+    if (!superEdit.nombreCompleto.trim()) { mostrar('error', 'Indique el nombre completo'); return; }
+    if (nuevo && (superEdit.clave ?? '').length < 6) { mostrar('error', 'La contraseña debe tener al menos 6 caracteres'); return; }
+    if (!nuevo && superEdit.clave && superEdit.clave.length < 6) { mostrar('error', 'La nueva contraseña debe tener al menos 6 caracteres'); return; }
+    setGuardando(true);
+    try {
+      const datos: UsuarioForm = {
+        ...superEdit, esSuperadmin: true,
+        nombreUsuario: superEdit.nombreUsuario.trim(), nombreCompleto: superEdit.nombreCompleto.trim(),
+      };
+      if (nuevo) await superadminService.crearUsuario(datos);
+      else await superadminService.actualizarUsuario(superEdit.codUsuario!, datos);
+      mostrar('ok', nuevo ? 'Superadministrador creado' : 'Superadministrador actualizado');
+      setSuperEdit(null);
+      await cargar();
+      setVerSuperadmins(true);
+    } catch (err) { mostrar('error', mensajeError(err, 'No se pudo guardar el superadministrador')); }
+    finally { setGuardando(false); }
+  };
 
   if (!listo) return null;
 
-  const editandoAMiMismo = !!usuarioEdit?.codUsuario && usuarioEdit.codUsuario === miId;
+  const editandoAMiMismo = !!superEdit?.codUsuario && superEdit.codUsuario === miId;
 
   return (
     <div className="min-h-screen bg-gray-100">
       {nodo}
-      <header className="flex flex-wrap items-center justify-between gap-3 px-8 py-4" style={{ backgroundColor: '#002a55' }}>
-        <div className="flex items-center gap-4">
-          <Image src="/db2.png" alt="data_business" width={120} height={44} style={{ objectFit: 'contain' }} priority />
-          <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold"
-            style={{ backgroundColor: 'rgba(34,196,161,0.15)', color: '#22c4a1' }}>
-            <MdShield size={14} /> SUPERADMINISTRADOR
-          </span>
-        </div>
-        <div className="flex gap-2">
-          <Boton variante="peligro" onClick={() => authService.logout()}><MdLogout /> Salir</Boton>
-        </div>
-      </header>
+      <AdminHeader>
+        <Boton variante="secundario" onClick={() => setVerSuperadmins(true)}>
+          <MdShield /> Superadministradores ({superadmins.length})
+        </Boton>
+        <Boton variante="secundario" onClick={() => router.push('/superadmin/roles')}>
+          <MdSettings /> Roles y permisos ({roles.length})
+        </Boton>
+      </AdminHeader>
 
       <main className="p-8 space-y-6 max-w-7xl mx-auto">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: COLORES.texto }}>Administración del sistema</h1>
-          <p className="text-sm mt-0.5" style={{ color: COLORES.tenue }}>Empresas, usuarios y a qué empresas entra cada usuario</p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex gap-1 p-1 rounded-xl" style={{ backgroundColor: '#e2e8f0' }}>
-            {([['empresas', 'Empresas', <MdBusiness key="e" />, empresas.length], ['usuarios', 'Usuarios', <MdPeople key="u" />, usuarios.length]] as const)
-              .map(([clave, texto, icono, n]) => (
-                <button key={clave} onClick={() => { setPestana(clave); setFiltro(''); }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold"
-                  style={{ backgroundColor: pestana === clave ? '#fff' : 'transparent', color: pestana === clave ? COLORES.brand : COLORES.suave }}>
-                  {icono} {texto} ({n})
-                </button>
-              ))}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold" style={{ color: COLORES.texto }}>Empresas</h1>
+            <p className="text-sm mt-0.5" style={{ color: COLORES.tenue }}>
+              Un solo listado. Use <strong>Gestionar</strong> para ver y administrar los usuarios de cada empresa.
+            </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-64">
               <MdSearch size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: COLORES.tenue }} />
-              <input value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Filtrar…" className={`${inputCls} pl-9`} style={inputStyle} />
+              <input value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Filtrar por RUC o razón social…"
+                className={`${inputCls} pl-9`} style={inputStyle} />
             </div>
-            {pestana === 'empresas'
-              ? <Boton onClick={() => setEmpresaEdit({ ...empresaVacia })}><MdAdd size={18} /> Nueva empresa</Boton>
-              : <Boton onClick={() => abrirUsuario()}><MdAdd size={18} /> Nuevo usuario</Boton>}
+            <Boton onClick={() => setEmpresaEdit({ ...empresaVacia })}><MdAdd size={18} /> Nueva empresa</Boton>
           </div>
         </div>
 
-        {pestana === 'empresas' ? (
-          <Card>
-            <Tabla columnas={['RUC', 'Razón social', 'Usuarios', 'Creada', 'Estado', '']} cargando={cargando} vacio={empresasFiltradas.length === 0}>
-              {empresasFiltradas.map(e => (
-                <tr key={e.codEmpresa} style={{ borderBottom: '1px solid #f8fafc' }}>
-                  <td className={`${tdCls} font-mono`}>{e.ruc}</td>
-                  <td className={`${tdCls} font-semibold`}>{e.razonSocial}</td>
-                  <td className={tdCls}>{e.totalUsuarios}</td>
-                  <td className={tdCls} style={{ color: COLORES.suave }}>{fmtFecha(e.createdAt)}</td>
-                  <td className={tdCls}><Pastilla texto={e.activo ? 'Activa' : 'Inactiva'} tono={e.activo ? 'ok' : 'neutro'} /></td>
-                  <td className={tdCls}>
-                    <Boton pequeno variante="secundario" onClick={() => setEmpresaEdit({ codEmpresa: e.codEmpresa, ruc: e.ruc, razonSocial: e.razonSocial, activo: e.activo })}>
+        <div className="flex flex-wrap gap-3">
+          <Pastilla texto={`${empresas.length} empresa(s)`} tono="marca" />
+          <Pastilla texto={`${empresas.filter(e => e.activo).length} activa(s)`} tono="ok" />
+          <Pastilla texto={`${empresas.reduce((n, e) => n + e.totalUsuarios, 0)} usuario(s) asignado(s)`} tono="neutro" />
+        </div>
+
+        <Card>
+          <Tabla columnas={['RUC', 'Razón social', 'Usuarios', 'Creada', 'Estado', 'Acciones']}
+            cargando={cargando} vacio={empresasFiltradas.length === 0}>
+            {empresasFiltradas.map(e => (
+              <tr key={e.codEmpresa} style={{ borderBottom: '1px solid #f8fafc' }}>
+                <td className={`${tdCls} font-mono`}>{e.ruc}</td>
+                <td className={`${tdCls} font-semibold`}>
+                  <span className="flex items-center gap-2"><MdBusiness size={16} style={{ color: COLORES.brand }} />{e.razonSocial}</span>
+                </td>
+                <td className={tdCls}>
+                  <span className="inline-flex items-center gap-1.5"><MdPeople size={16} style={{ color: COLORES.tenue }} />{e.totalUsuarios}</span>
+                </td>
+                <td className={tdCls} style={{ color: COLORES.suave }}>{fmtFecha(e.createdAt)}</td>
+                <td className={tdCls}><Pastilla texto={e.activo ? 'Activa' : 'Inactiva'} tono={e.activo ? 'ok' : 'neutro'} /></td>
+                <td className={tdCls}>
+                  <div className="flex flex-wrap gap-2">
+                    <Boton pequeno onClick={() => abrirGestion(e)}><MdOutlineAdminPanelSettings /> Gestionar</Boton>
+                    <Boton pequeno variante="secundario"
+                      onClick={() => setEmpresaEdit({ codEmpresa: e.codEmpresa, ruc: e.ruc, razonSocial: e.razonSocial, activo: e.activo })}>
                       <MdEdit /> Editar
                     </Boton>
-                  </td>
-                </tr>
-              ))}
-            </Tabla>
-          </Card>
-        ) : (
-          <Card>
-            <Tabla columnas={['Usuario', 'Nombre', 'Empresas asignadas', 'Estado', '']} cargando={cargando} vacio={usuariosFiltrados.length === 0}>
-              {usuariosFiltrados.map(u => (
-                <tr key={u.codUsuario} style={{ borderBottom: '1px solid #f8fafc' }}>
-                  <td className={tdCls}>
-                    <span className="font-mono font-semibold">{u.nombreUsuario}</span>
-                    {u.esSuperadmin && <span className="ml-2"><Pastilla texto="Superadmin" tono="marca" /></span>}
-                  </td>
-                  <td className={tdCls}>{u.nombreCompleto}<p className="text-xs" style={{ color: COLORES.tenue }}>{u.descripcion}</p></td>
-                  <td className={tdCls}>
-                    {u.esSuperadmin
-                      ? <span className="text-xs" style={{ color: COLORES.suave }}>No aplica (solo administra)</span>
-                      : u.empresas.length === 0
-                        ? <span className="text-xs" style={{ color: '#f59e0b' }}>Sin empresas: no podrá entrar</span>
-                        : <div className="flex flex-wrap gap-1">{u.empresas.map(a => (
-                            <Pastilla key={a.codEmpresa} texto={`${a.razonSocial} · ${a.rol === 'AUDITOR' ? 'Auditor' : 'Admin'}`} tono={a.empresaActiva ? 'neutro' : 'error'} />
-                          ))}</div>}
-                  </td>
-                  <td className={tdCls}><Pastilla texto={u.activo ? 'Activo' : 'Inactivo'} tono={u.activo ? 'ok' : 'neutro'} /></td>
-                  <td className={tdCls}><Boton pequeno variante="secundario" onClick={() => abrirUsuario(u)}><MdEdit /> Editar</Boton></td>
-                </tr>
-              ))}
-            </Tabla>
-          </Card>
-        )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </Tabla>
+        </Card>
       </main>
 
+      {/* ── Modal empresa ── */}
       <ModalBase abierto={!!empresaEdit} onCerrar={() => setEmpresaEdit(null)} ancho="max-w-lg"
         titulo={empresaEdit?.codEmpresa ? 'Editar empresa' : 'Nueva empresa'}
         subtitulo="Al crearla se cargan los campos del asistente de importación de activos"
@@ -250,86 +333,207 @@ export default function SuperAdminPage() {
         )}
       </ModalBase>
 
-      <ModalBase abierto={!!usuarioEdit} onCerrar={() => setUsuarioEdit(null)} ancho="max-w-3xl"
-        titulo={usuarioEdit?.codUsuario ? `Editar usuario ${usuarioEdit.nombreUsuario}` : 'Nuevo usuario'}
-        subtitulo="Datos de acceso y empresas a las que puede entrar"
+      {/* ── Modal: gestionar usuarios de la empresa ── */}
+      <ModalBase abierto={!!gestion} onCerrar={() => setGestion(null)} ancho="max-w-5xl"
+        titulo={gestion ? gestion.razonSocial : ''}
+        subtitulo={gestion ? `RUC ${gestion.ruc} · ${usuariosEmpresa.length} usuario(s) · se administran los accesos y roles de esta empresa` : ''}
+        pie={<Boton variante="secundario" onClick={() => setGestion(null)}>Cerrar</Boton>}>
+        {gestion && (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: COLORES.tenue }}>
+                Usuarios de la empresa
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Boton pequeno variante="secundario" onClick={() => { setPanelAsignar(v => !v); setPanelCrear(false); }}>
+                  <MdPersonAdd /> Asignar existente
+                </Boton>
+                <Boton pequeno onClick={() => { setPanelCrear(v => !v); setPanelAsignar(false); }}>
+                  <MdAdd /> Crear usuario
+                </Boton>
+              </div>
+            </div>
+
+            {panelAsignar && (
+              <div className="rounded-xl p-4 space-y-3" style={{ backgroundColor: '#f8fafc', border: `1.5px solid ${COLORES.borde}` }}>
+                <p className="text-sm font-semibold" style={{ color: COLORES.texto }}>Asignar un usuario que ya existe</p>
+                {disponibles.length === 0
+                  ? <p className="text-sm" style={{ color: COLORES.tenue }}>No hay usuarios activos sin asignar a esta empresa.</p>
+                  : (
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-2 items-end">
+                      <Campo etiqueta="Usuario">
+                        <select value={asignacion.codUsuario}
+                          onChange={e => setAsignacion(a => ({ ...a, codUsuario: e.target.value ? Number(e.target.value) : '' }))}
+                          className={inputCls} style={inputStyle}>
+                          <option value="">Seleccione…</option>
+                          {disponibles.map(u => <option key={u.codUsuario} value={u.codUsuario}>{u.nombreCompleto} ({u.nombreUsuario})</option>)}
+                        </select>
+                      </Campo>
+                      <Campo etiqueta="Rol">
+                        <select value={asignacion.codRol}
+                          onChange={e => setAsignacion(a => ({ ...a, codRol: e.target.value ? Number(e.target.value) : '' }))}
+                          className={inputCls} style={inputStyle}>
+                          <option value="">Seleccione…</option>
+                          {rolesActivos.map(r => <option key={r.codRol} value={r.codRol}>{r.nombre}</option>)}
+                        </select>
+                      </Campo>
+                      <Boton onClick={asignarExistente} disabled={guardando}>Asignar</Boton>
+                    </div>
+                  )}
+              </div>
+            )}
+
+            {panelCrear && (
+              <div className="rounded-xl p-4 space-y-3" style={{ backgroundColor: '#f8fafc', border: `1.5px solid ${COLORES.borde}` }}>
+                <p className="text-sm font-semibold" style={{ color: COLORES.texto }}>Crear usuario y asignarlo a {gestion.razonSocial}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Campo etiqueta="Usuario" requerido>
+                    <input value={nuevoUsuario.nombreUsuario} autoComplete="off"
+                      onChange={e => setNuevoUsuario(u => ({ ...u, nombreUsuario: e.target.value }))}
+                      className={`${inputCls} font-mono`} style={inputStyle} placeholder="jperez" />
+                  </Campo>
+                  <Campo etiqueta="Contraseña" requerido>
+                    <div className="relative">
+                      <MdVpnKey size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: COLORES.tenue }} />
+                      <input type="password" value={nuevoUsuario.clave ?? ''} autoComplete="new-password"
+                        onChange={e => setNuevoUsuario(u => ({ ...u, clave: e.target.value }))}
+                        className={`${inputCls} pl-9`} style={inputStyle} placeholder="Mínimo 6 caracteres" />
+                    </div>
+                  </Campo>
+                  <Campo etiqueta="Nombre completo" requerido>
+                    <input value={nuevoUsuario.nombreCompleto}
+                      onChange={e => setNuevoUsuario(u => ({ ...u, nombreCompleto: e.target.value }))}
+                      className={inputCls} style={inputStyle} />
+                  </Campo>
+                  <Campo etiqueta="Cargo / descripción">
+                    <input value={nuevoUsuario.descripcion ?? ''}
+                      onChange={e => setNuevoUsuario(u => ({ ...u, descripcion: e.target.value }))}
+                      className={inputCls} style={inputStyle} />
+                  </Campo>
+                  <Campo etiqueta="Rol en la empresa" requerido>
+                    <select value={rolNuevo} onChange={e => setRolNuevo(e.target.value ? Number(e.target.value) : '')}
+                      className={inputCls} style={inputStyle}>
+                      <option value="">Seleccione…</option>
+                      {rolesActivos.map(r => <option key={r.codRol} value={r.codRol}>{r.nombre}</option>)}
+                    </select>
+                  </Campo>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Boton pequeno variante="secundario" onClick={() => setPanelCrear(false)}>Cancelar</Boton>
+                  <Boton pequeno onClick={crearUsuarioEnEmpresa} disabled={guardando}>
+                    {guardando ? 'Creando…' : 'Crear y asignar'}
+                  </Boton>
+                </div>
+              </div>
+            )}
+
+            <Tabla columnas={['Usuario', 'Nombre', 'Rol', 'Acceso', '']} cargando={cargandoGestion} vacio={usuariosEmpresa.length === 0}>
+              {usuariosEmpresa.map(u => (
+                <tr key={u.codUsuario} style={{ borderBottom: '1px solid #f8fafc', opacity: u.usuarioActivo ? 1 : 0.55 }}>
+                  <td className={tdCls}>
+                    <span className="font-mono font-semibold">{u.nombreUsuario}</span>
+                    {!u.usuarioActivo && <span className="ml-2"><Pastilla texto="Inactivo" tono="neutro" /></span>}
+                  </td>
+                  <td className={tdCls}>
+                    {u.nombreCompleto}
+                    {u.descripcion && <p className="text-xs" style={{ color: COLORES.tenue }}>{u.descripcion}</p>}
+                  </td>
+                  <td className={tdCls}>
+                    <select value={u.codRol ?? ''} aria-label={`Rol de ${u.nombreUsuario}`}
+                      onChange={e => cambiarRol(u, Number(e.target.value))}
+                      className="w-44 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
+                      {!u.codRol && <option value="">{u.rol || 'Sin rol'}</option>}
+                      {roles.map(r => <option key={r.codRol} value={r.codRol}>{r.nombre}{r.activo ? '' : ' (inactivo)'}</option>)}
+                    </select>
+                  </td>
+                  <td className={tdCls}>
+                    <div className="flex flex-col gap-1">
+                      <Pastilla texto={u.activo ? 'Habilitado' : 'Deshabilitado'} tono={u.activo ? 'ok' : 'error'} />
+                      <button onClick={() => alternarEstado(u)} className="text-xs font-semibold text-left"
+                        style={{ color: u.activo ? '#b45309' : '#0f9b76' }}>
+                        {u.activo ? 'Deshabilitar acceso' : 'Habilitar acceso'}
+                      </button>
+                    </div>
+                  </td>
+                  <td className={tdCls}>
+                    <Boton pequeno variante="peligro" onClick={() => quitarUsuario(u)} title="Quitar de la empresa">
+                      <MdDeleteOutline /> Quitar
+                    </Boton>
+                  </td>
+                </tr>
+              ))}
+            </Tabla>
+          </>
+        )}
+      </ModalBase>
+
+      {/* ── Modal: superadministradores ── */}
+      <ModalBase abierto={verSuperadmins} onCerrar={() => setVerSuperadmins(false)} ancho="max-w-3xl"
+        titulo="Superadministradores"
+        subtitulo="Cuentas globales: administran todas las empresas y no entran a ninguna"
         pie={<>
-          <Boton variante="secundario" onClick={() => setUsuarioEdit(null)}>Cancelar</Boton>
-          <Boton onClick={guardarUsuario} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Boton>
+          <Boton variante="secundario" onClick={() => setVerSuperadmins(false)}>Cerrar</Boton>
+          <Boton onClick={() => abrirFormSuper()}><MdAdd /> Nuevo superadministrador</Boton>
         </>}>
-        {usuarioEdit && (
+        <Tabla columnas={['Usuario', 'Nombre', 'Estado', '']} cargando={cargando} vacio={superadmins.length === 0}>
+          {superadmins.map(u => (
+            <tr key={u.codUsuario} style={{ borderBottom: '1px solid #f8fafc' }}>
+              <td className={tdCls}><span className="font-mono font-semibold">{u.nombreUsuario}</span></td>
+              <td className={tdCls}>{u.nombreCompleto}<p className="text-xs" style={{ color: COLORES.tenue }}>{u.descripcion}</p></td>
+              <td className={tdCls}><Pastilla texto={u.activo ? 'Activo' : 'Inactivo'} tono={u.activo ? 'ok' : 'neutro'} /></td>
+              <td className={tdCls}>
+                <Boton pequeno variante="secundario" onClick={() => abrirFormSuper(u)}><MdEdit /> Editar</Boton>
+              </td>
+            </tr>
+          ))}
+        </Tabla>
+      </ModalBase>
+
+      {/* ── Modal: alta/edición de superadministrador ── */}
+      <ModalBase abierto={!!superEdit} onCerrar={() => setSuperEdit(null)} ancho="max-w-2xl"
+        titulo={superEdit?.codUsuario ? `Editar ${superEdit.nombreUsuario}` : 'Nuevo superadministrador'}
+        subtitulo="Solo administra empresas, usuarios, roles y permisos"
+        pie={<>
+          <Boton variante="secundario" onClick={() => { setSuperEdit(null); setVerSuperadmins(true); }}>Cancelar</Boton>
+          <Boton onClick={guardarSuper} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Boton>
+        </>}>
+        {superEdit && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Campo etiqueta="Usuario" requerido>
-                <input value={usuarioEdit.nombreUsuario} onChange={e => setUsuarioEdit(x => x && ({ ...x, nombreUsuario: e.target.value }))}
-                  className={`${inputCls} font-mono`} style={inputStyle} placeholder="jperez" autoComplete="off" />
+                <input value={superEdit.nombreUsuario} autoComplete="off"
+                  onChange={e => setSuperEdit(x => x && ({ ...x, nombreUsuario: e.target.value }))}
+                  className={`${inputCls} font-mono`} style={inputStyle} placeholder="jperez" />
               </Campo>
-              <Campo etiqueta={usuarioEdit.codUsuario ? 'Nueva contraseña (opcional)' : 'Contraseña'} requerido={!usuarioEdit.codUsuario}>
+              <Campo etiqueta={superEdit.codUsuario ? 'Nueva contraseña (opcional)' : 'Contraseña'} requerido={!superEdit.codUsuario}>
                 <div className="relative">
                   <MdVpnKey size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: COLORES.tenue }} />
-                  <input type="password" value={usuarioEdit.clave ?? ''} autoComplete="new-password"
-                    onChange={e => setUsuarioEdit(x => x && ({ ...x, clave: e.target.value }))}
-                    className={`${inputCls} pl-9`} style={inputStyle} placeholder={usuarioEdit.codUsuario ? 'Dejar vacío para no cambiarla' : 'Mínimo 6 caracteres'} />
+                  <input type="password" value={superEdit.clave ?? ''} autoComplete="new-password"
+                    onChange={e => setSuperEdit(x => x && ({ ...x, clave: e.target.value }))}
+                    className={`${inputCls} pl-9`} style={inputStyle}
+                    placeholder={superEdit.codUsuario ? 'Dejar vacío para no cambiarla' : 'Mínimo 6 caracteres'} />
                 </div>
               </Campo>
               <Campo etiqueta="Nombre completo" requerido>
-                <input value={usuarioEdit.nombreCompleto} onChange={e => setUsuarioEdit(x => x && ({ ...x, nombreCompleto: e.target.value }))}
+                <input value={superEdit.nombreCompleto}
+                  onChange={e => setSuperEdit(x => x && ({ ...x, nombreCompleto: e.target.value }))}
                   className={inputCls} style={inputStyle} />
               </Campo>
               <Campo etiqueta="Cargo / descripción">
-                <input value={usuarioEdit.descripcion ?? ''} onChange={e => setUsuarioEdit(x => x && ({ ...x, descripcion: e.target.value }))}
+                <input value={superEdit.descripcion ?? ''}
+                  onChange={e => setSuperEdit(x => x && ({ ...x, descripcion: e.target.value }))}
                   className={inputCls} style={inputStyle} />
               </Campo>
             </div>
-            <div className="flex flex-wrap gap-6 text-sm" style={{ color: COLORES.texto }}>
-              <label className="flex items-center gap-2" title={editandoAMiMismo ? 'No puede desactivarse a sí mismo' : ''}>
-                <input type="checkbox" checked={usuarioEdit.activo} disabled={editandoAMiMismo}
-                  onChange={e => setUsuarioEdit(x => x && ({ ...x, activo: e.target.checked }))} /> Usuario activo
-              </label>
-              <label className="flex items-center gap-2" title={editandoAMiMismo ? 'No puede quitarse su propio rol' : ''}>
-                <input type="checkbox" checked={usuarioEdit.esSuperadmin} disabled={editandoAMiMismo}
-                  onChange={e => setUsuarioEdit(x => x && ({ ...x, esSuperadmin: e.target.checked }))} /> Superadministrador
-              </label>
-            </div>
-
-            {usuarioEdit.esSuperadmin ? (
-              <p className="text-sm p-3 rounded-xl" style={{ backgroundColor: 'rgba(30,71,134,0.05)', color: COLORES.suave }}>
-                El superadministrador no entra a ninguna empresa: solo administra empresas y usuarios.
-              </p>
-            ) : (
-            <div className="space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: COLORES.tenue }}>
-                Empresas asignadas ({Object.keys(asignaciones).length})
-              </p>
-              <div className="rounded-xl overflow-hidden" style={{ border: `1.5px solid ${COLORES.borde}` }}>
-                {empresas.length === 0 && <p className="p-4 text-sm" style={{ color: COLORES.tenue }}>Primero cree una empresa.</p>}
-                {empresas.map(e => {
-                  const rol = asignaciones[e.codEmpresa];
-                  return (
-                    <div key={e.codEmpresa} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5"
-                      style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: rol ? 'rgba(34,196,161,0.04)' : 'transparent' }}>
-                      <label className="flex items-center gap-3 text-sm cursor-pointer flex-1">
-                        <input type="checkbox" checked={!!rol} onChange={() => alternarEmpresa(e.codEmpresa)} />
-                        <span>
-                          <span className="font-semibold">{e.razonSocial}</span>
-                          <span className="ml-2 font-mono text-xs" style={{ color: COLORES.tenue }}>{e.ruc}</span>
-                          {!e.activo && <span className="ml-2"><Pastilla texto="Inactiva" tono="neutro" /></span>}
-                        </span>
-                      </label>
-                      {rol && (
-                        // select nativo: el desplegable propio quedaba recortado dentro de la lista
-                        <select value={rol} aria-label={`Rol en ${e.razonSocial}`}
-                          onChange={ev => setAsignaciones(a => ({ ...a, [e.codEmpresa]: ev.target.value as RolEmpresa }))}
-                          className="w-44 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
-                          {ROLES_EMPRESA.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                        </select>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            )}
+            <label className="flex items-center gap-2 text-sm" style={{ color: COLORES.texto }}
+              title={editandoAMiMismo ? 'No puede desactivarse a sí mismo' : ''}>
+              <input type="checkbox" checked={superEdit.activo} disabled={editandoAMiMismo}
+                onChange={e => setSuperEdit(x => x && ({ ...x, activo: e.target.checked }))} /> Usuario activo
+            </label>
+            <p className="text-xs p-3 rounded-xl" style={{ backgroundColor: 'rgba(30,71,134,0.05)', color: COLORES.suave }}>
+              <MdClose className="inline mr-1" size={12} />
+              El superadministrador no se asigna a empresas: solo administra empresas, usuarios y roles.
+            </p>
           </>
         )}
       </ModalBase>
