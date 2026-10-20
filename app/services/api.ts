@@ -46,11 +46,11 @@ api.interceptors.request.use(
   }
 );
 
-// Manejo de errores (Redirección si la sesión muere)
+// Manejo de errores (la sesión muere solo con 401; un 403 es falta de permisos y se muestra en pantalla)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+    if (error.response && error.response.status === 401) {
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
         localStorage.removeItem('dbasset_user');
         window.location.href = '/login';
