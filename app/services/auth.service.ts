@@ -8,7 +8,9 @@ export interface Empresa {
   codEmpresa: number;
   ruc: string;
   razonSocial: string;
+  codRol?: number;
   rol: string;
+  permisos?: string[];
 }
 
 export interface LoginRequest {
@@ -82,6 +84,23 @@ export const authService = {
   },
 
   esSuperadmin: (): boolean => !!authService.getUserData()?.esSuperadmin,
+
+  /** Empresa seleccionada actualmente (o undefined si no hay ninguna). */
+  empresaActual: (): Empresa | undefined => {
+    const data = authService.getUserData();
+    if (!data || !data.currentCompanyId) return undefined;
+    return data.empresas?.find(e => e.codEmpresa === data.currentCompanyId);
+  },
+
+  /** Permisos (módulo.acción) del rol del usuario en la empresa seleccionada. */
+  permisos: (): string[] => authService.empresaActual()?.permisos ?? [],
+
+  /** true si el rol del usuario en la empresa actual incluye el permiso indicado. */
+  puede: (codigo: string): boolean => {
+    if (authService.esSuperadmin()) return false;
+    const permisos = authService.permisos();
+    return permisos.includes('*') || permisos.includes(codigo);
+  },
 
   // Método de compatibilidad (alias)
   saveUserData: (data: LoginResponse): void => {
