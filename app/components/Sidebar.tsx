@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation';
 import { authService } from '../services/auth.service';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import {
   MdDashboard, MdLogout, MdMenu, MdClose,
@@ -17,6 +17,8 @@ interface MenuItem {
   name: string;
   path: string;
   icon: IconType;
+  /** Permiso (módulo.acción) que debe tener el rol en la empresa actual. */
+  permiso?: string;
 }
 
 export default function Sidebar() {
@@ -24,6 +26,15 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(true);
   const [mantenedorOpen, setMantenedorOpen] = useState(false);
+  // Permisos del rol en la empresa actual (null = todavía no se leyó la sesión)
+  const [permisos, setPermisos] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setPermisos(authService.permisos()), 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  const visible = (item: MenuItem) => !item.permiso || (permisos ?? []).includes(item.permiso);
 
   const companyInfo = (() => {
     if (typeof window === 'undefined') return { ruc: '', razonSocial: '' };
@@ -37,28 +48,33 @@ export default function Sidebar() {
   const handleChangeCompany = () => router.push('/select-company');
 
   const menuItems: MenuItem[] = [
-    { name: 'Dashboard',       path: '/dashboard',                       icon: MdDashboard     },
-    { name: 'Activos',         path: '/dashboard/activos',               icon: MdQrCode        },
-    { name: 'Cargas',          path: '/dashboard/cargas',                icon: MdLocalShipping },
-    { name: 'Configuración',   path: '/dashboard/config-organizacional', icon: MdSettings      },
-    { name: 'Custodios',       path: '/dashboard/responsables',          icon: MdPeople        },
-    { name: 'Inventariadores', path: '/dashboard/inventariador',         icon: MdAssignmentInd },
+    { name: 'Dashboard',       path: '/dashboard',                       icon: MdDashboard,     permiso: 'dashboard.ver' },
+    { name: 'Activos',         path: '/dashboard/activos',               icon: MdQrCode,        permiso: 'activos.ver' },
+    { name: 'Cargas',          path: '/dashboard/cargas',                icon: MdLocalShipping, permiso: 'cargas.ver' },
+    { name: 'Configuración',   path: '/dashboard/config-organizacional', icon: MdSettings,      permiso: 'configuracion.ver' },
+    { name: 'Custodios',       path: '/dashboard/responsables',          icon: MdPeople,        permiso: 'responsables.ver' },
+    { name: 'Inventariadores', path: '/dashboard/inventariador',         icon: MdAssignmentInd, permiso: 'inventariadores.ver' },
   ];
 
   const rfidItems: MenuItem[] = [
-    { name: 'Inventario RFID', path: '/dashboard/rfid/inventarios', icon: MdSensors             },
-    { name: 'Vincular EPC',    path: '/dashboard/rfid/vincular',    icon: MdLink                },
-    { name: 'Transferencias',  path: '/dashboard/transferencias',   icon: MdCompareArrows       },
-    { name: 'Bajas',           path: '/dashboard/bajas',            icon: MdRemoveCircleOutline },
-    { name: 'Búsqueda',        path: '/dashboard/busqueda',         icon: MdManageSearch        },
-    { name: 'Reportes',        path: '/dashboard/reportes',         icon: MdAssessment          },
+    { name: 'Inventario RFID', path: '/dashboard/rfid/inventarios', icon: MdSensors,             permiso: 'rfid.ver' },
+    { name: 'Vincular EPC',    path: '/dashboard/rfid/vincular',    icon: MdLink,                permiso: 'rfid.ver' },
+    { name: 'Transferencias',  path: '/dashboard/transferencias',   icon: MdCompareArrows,       permiso: 'transferencias.ver' },
+    { name: 'Bajas',           path: '/dashboard/bajas',            icon: MdRemoveCircleOutline, permiso: 'bajas.ver' },
+    { name: 'Búsqueda',        path: '/dashboard/busqueda',         icon: MdManageSearch,        permiso: 'busqueda.ver' },
+    { name: 'Reportes',        path: '/dashboard/reportes',         icon: MdAssessment,          permiso: 'reportes.ver' },
   ];
 
   const mantenedorItems: MenuItem[] = [
-    { name: 'Colores', path: '/dashboard/colores', icon: MdColorLens         },
-    { name: 'Marcas',  path: '/dashboard/marcas',  icon: MdBrandingWatermark },
-    { name: 'Estados', path: '/dashboard/estados', icon: MdInfo              },
+    { name: 'Colores', path: '/dashboard/colores', icon: MdColorLens,         permiso: 'mantenedores.ver' },
+    { name: 'Marcas',  path: '/dashboard/marcas',  icon: MdBrandingWatermark, permiso: 'mantenedores.ver' },
+    { name: 'Estados', path: '/dashboard/estados', icon: MdInfo,               permiso: 'mantenedores.ver' },
   ];
+
+  // El Dashboard siempre está disponible para no dejar al usuario en una pantalla vacía.
+  const menuVisibles = menuItems.filter(item => item.path === '/dashboard' || visible(item));
+  const rfidVisibles = rfidItems.filter(visible);
+  const mantenedorVisibles = mantenedorItems.filter(visible);
 
   const isMantenedorActive = mantenedorItems.some(item => pathname === item.path);
 
@@ -157,7 +173,7 @@ export default function Sidebar() {
             Menú principal
           </p>
 
-          {menuItems.map((item) => {
+          {menuVisibles.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.path;
             return (
@@ -176,12 +192,14 @@ export default function Sidebar() {
           })}
 
           {/* Gestión de activos con RFID */}
-          <p className="px-3 pt-3 pb-2 text-xs font-semibold uppercase tracking-widest"
-            style={{ color: c.sectionLabel }}>
-            Gestión RFID
-          </p>
+          {rfidVisibles.length > 0 && (
+            <p className="px-3 pt-3 pb-2 text-xs font-semibold uppercase tracking-widest"
+              style={{ color: c.sectionLabel }}>
+              Gestión RFID
+            </p>
+          )}
 
-          {rfidItems.map((item) => {
+          {rfidVisibles.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.path || pathname.startsWith(item.path + '/');
             return (
@@ -200,6 +218,7 @@ export default function Sidebar() {
           })}
 
           {/* Mantenedor desplegable */}
+          {mantenedorVisibles.length > 0 && (
           <div className="pt-3">
             <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-widest"
               style={{ color: c.sectionLabel }}>
@@ -224,7 +243,7 @@ export default function Sidebar() {
 
             <div className={`overflow-hidden transition-all duration-300 ${mantenedorOpen ? 'max-h-48' : 'max-h-0'}`}>
               <div className="ml-5 mt-1 space-y-0.5 pl-3" style={{ borderLeft: `1px solid ${c.border}` }}>
-                {mantenedorItems.map((item) => {
+                {mantenedorVisibles.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.path;
                   return (
@@ -247,6 +266,7 @@ export default function Sidebar() {
               </div>
             </div>
           </div>
+          )}
         </nav>
 
         {/* ── FOOTER ── */}
