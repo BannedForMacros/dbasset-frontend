@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   MdBusiness, MdPeople, MdAdd, MdEdit, MdSearch, MdShield, MdVpnKey,
-  MdSettings, MdPersonAdd, MdDeleteOutline, MdOutlineAdminPanelSettings, MdClose,
+  MdSettings, MdPersonAdd, MdDeleteOutline, MdOutlineAdminPanelSettings, MdInfo,
 } from 'react-icons/md';
 import { Card, Boton, Campo, ModalBase, Tabla, tdCls, Pastilla, inputCls, inputStyle, useAviso, COLORES } from '@/app/components/rfid/ui';
 import AdminHeader from './components/AdminHeader';
@@ -531,7 +531,7 @@ export default function SuperAdminPage() {
                 onChange={e => setSuperEdit(x => x && ({ ...x, activo: e.target.checked }))} /> Usuario activo
             </label>
             <p className="text-xs p-3 rounded-xl" style={{ backgroundColor: 'rgba(30,71,134,0.05)', color: COLORES.suave }}>
-              <MdClose className="inline mr-1" size={12} />
+              <MdInfo className="inline mr-1" size={14} />
               El superadministrador no se asigna a empresas: solo administra empresas, usuarios y roles.
             </p>
           </>
