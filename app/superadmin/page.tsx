@@ -6,7 +6,9 @@ import {
   MdBusiness, MdPeople, MdAdd, MdEdit, MdSearch, MdShield, MdVpnKey,
   MdSettings, MdPersonAdd, MdDeleteOutline, MdOutlineAdminPanelSettings, MdInfo,
 } from 'react-icons/md';
-import { Card, Boton, Campo, ModalBase, Tabla, tdCls, Pastilla, inputCls, inputStyle, useAviso, COLORES } from '@/app/components/rfid/ui';
+import { Card, Boton, Campo, ModalBase, Tabla, tdCls, Pastilla, useAviso, COLORES } from '@/app/components/rfid/ui';
+import Select from '@/app/components/Select';
+import Input from '@/app/components/Input';
 import AdminHeader from './components/AdminHeader';
 import { authService } from '@/app/services/auth.service';
 import {
@@ -295,11 +297,8 @@ export default function SuperAdminPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-64">
-              <MdSearch size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: COLORES.tenue }} />
-              <input value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Filtrar por RUC o razón social…"
-                className={`${inputCls} pl-9`} style={inputStyle} />
-            </div>
+            <Input value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Filtrar por RUC o razón social…"
+              icon={<MdSearch size={16} />} containerClassName="w-64" />
             <Boton onClick={() => setEmpresaEdit({ ...empresaVacia })}><MdAdd size={18} /> Nueva empresa</Boton>
           </div>
         </div>
@@ -350,13 +349,14 @@ export default function SuperAdminPage() {
         {empresaEdit && (
           <>
             <Campo etiqueta="RUC" requerido>
-              <input value={empresaEdit.ruc} maxLength={11} inputMode="numeric"
+              <Input value={empresaEdit.ruc} maxLength={11} inputMode="numeric"
                 onChange={e => setEmpresaEdit(x => x && ({ ...x, ruc: e.target.value.replace(/\D/g, '') }))}
-                className={`${inputCls} font-mono`} style={inputStyle} placeholder="20xxxxxxxxx" autoFocus />
+                className="font-mono" placeholder="20xxxxxxxxx" autoFocus />
             </Campo>
             <Campo etiqueta="Razón social" requerido>
-              <input value={empresaEdit.razonSocial} onChange={e => setEmpresaEdit(x => x && ({ ...x, razonSocial: e.target.value }))}
-                className={inputCls} style={inputStyle} maxLength={255} />
+              <Input value={empresaEdit.razonSocial}
+                onChange={e => setEmpresaEdit(x => x && ({ ...x, razonSocial: e.target.value }))}
+                maxLength={255} />
             </Campo>
             <label className="flex items-center gap-2 text-sm" style={{ color: COLORES.texto }}>
               <input type="checkbox" checked={empresaEdit.activo} onChange={e => setEmpresaEdit(x => x && ({ ...x, activo: e.target.checked }))} />
@@ -395,20 +395,16 @@ export default function SuperAdminPage() {
                   : (
                     <div className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-2 items-end">
                       <Campo etiqueta="Usuario">
-                        <select value={asignacion.codUsuario}
-                          onChange={e => setAsignacion(a => ({ ...a, codUsuario: e.target.value ? Number(e.target.value) : '' }))}
-                          className={inputCls} style={inputStyle}>
-                          <option value="">Seleccione…</option>
-                          {disponibles.map(u => <option key={u.codUsuario} value={u.codUsuario}>{u.nombreCompleto} ({u.nombreUsuario})</option>)}
-                        </select>
+                        <Select value={asignacion.codUsuario}
+                          onChange={v => setAsignacion(a => ({ ...a, codUsuario: v ? Number(v) : '' }))}
+                          placeholder="Seleccione…"
+                          options={disponibles.map(u => ({ value: u.codUsuario, label: `${u.nombreCompleto} (${u.nombreUsuario})` }))} />
                       </Campo>
                       <Campo etiqueta="Rol">
-                        <select value={asignacion.codRol}
-                          onChange={e => setAsignacion(a => ({ ...a, codRol: e.target.value ? Number(e.target.value) : '' }))}
-                          className={inputCls} style={inputStyle}>
-                          <option value="">Seleccione…</option>
-                          {rolesActivos.map(r => <option key={r.codRol} value={r.codRol}>{r.nombre}</option>)}
-                        </select>
+                        <Select value={asignacion.codRol}
+                          onChange={v => setAsignacion(a => ({ ...a, codRol: v ? Number(v) : '' }))}
+                          placeholder="Seleccione…"
+                          options={rolesActivos.map(r => ({ value: r.codRol, label: r.nombre }))} />
                       </Campo>
                       <Boton onClick={asignarExistente} disabled={guardando}>Asignar</Boton>
                     </div>
@@ -421,34 +417,27 @@ export default function SuperAdminPage() {
                 <p className="text-sm font-semibold" style={{ color: COLORES.texto }}>Crear usuario y asignarlo a {gestion.razonSocial}</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Campo etiqueta="Usuario" requerido>
-                    <input value={nuevoUsuario.nombreUsuario} autoComplete="off"
+                    <Input value={nuevoUsuario.nombreUsuario} autoComplete="off"
                       onChange={e => setNuevoUsuario(u => ({ ...u, nombreUsuario: e.target.value }))}
-                      className={`${inputCls} font-mono`} style={inputStyle} placeholder="jperez" />
+                      className="font-mono" placeholder="jperez" />
                   </Campo>
                   <Campo etiqueta="Contraseña" requerido>
-                    <div className="relative">
-                      <MdVpnKey size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: COLORES.tenue }} />
-                      <input type="password" value={nuevoUsuario.clave ?? ''} autoComplete="new-password"
-                        onChange={e => setNuevoUsuario(u => ({ ...u, clave: e.target.value }))}
-                        className={`${inputCls} pl-9`} style={inputStyle} placeholder="Mínimo 6 caracteres" />
-                    </div>
+                    <Input type="password" value={nuevoUsuario.clave ?? ''} autoComplete="new-password"
+                      onChange={e => setNuevoUsuario(u => ({ ...u, clave: e.target.value }))}
+                      icon={<MdVpnKey size={16} />} placeholder="Mínimo 6 caracteres" />
                   </Campo>
                   <Campo etiqueta="Nombre completo" requerido>
-                    <input value={nuevoUsuario.nombreCompleto}
-                      onChange={e => setNuevoUsuario(u => ({ ...u, nombreCompleto: e.target.value }))}
-                      className={inputCls} style={inputStyle} />
+                    <Input value={nuevoUsuario.nombreCompleto}
+                      onChange={e => setNuevoUsuario(u => ({ ...u, nombreCompleto: e.target.value }))} />
                   </Campo>
                   <Campo etiqueta="Cargo / descripción">
-                    <input value={nuevoUsuario.descripcion ?? ''}
-                      onChange={e => setNuevoUsuario(u => ({ ...u, descripcion: e.target.value }))}
-                      className={inputCls} style={inputStyle} />
+                    <Input value={nuevoUsuario.descripcion ?? ''}
+                      onChange={e => setNuevoUsuario(u => ({ ...u, descripcion: e.target.value }))} />
                   </Campo>
                   <Campo etiqueta="Rol en la empresa" requerido>
-                    <select value={rolNuevo} onChange={e => setRolNuevo(e.target.value ? Number(e.target.value) : '')}
-                      className={inputCls} style={inputStyle}>
-                      <option value="">Seleccione…</option>
-                      {rolesActivos.map(r => <option key={r.codRol} value={r.codRol}>{r.nombre}</option>)}
-                    </select>
+                    <Select value={rolNuevo} onChange={v => setRolNuevo(v ? Number(v) : '')}
+                      placeholder="Seleccione…"
+                      options={rolesActivos.map(r => ({ value: r.codRol, label: r.nombre }))} />
                   </Campo>
                 </div>
                 <div className="flex justify-end gap-2">
@@ -472,12 +461,10 @@ export default function SuperAdminPage() {
                     {u.descripcion && <p className="text-xs" style={{ color: COLORES.tenue }}>{u.descripcion}</p>}
                   </td>
                   <td className={tdCls}>
-                    <select value={u.codRol ?? ''} aria-label={`Rol de ${u.nombreUsuario}`}
-                      onChange={e => cambiarRol(u, Number(e.target.value))}
-                      className="w-44 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
-                      {!u.codRol && <option value="">{u.rol || 'Sin rol'}</option>}
-                      {roles.map(r => <option key={r.codRol} value={r.codRol}>{r.nombre}{r.activo ? '' : ' (inactivo)'}</option>)}
-                    </select>
+                    <Select size="sm" value={u.codRol ?? ''} ariaLabel={`Rol de ${u.nombreUsuario}`}
+                      onChange={v => cambiarRol(u, Number(v))}
+                      className="w-44" placeholder={u.rol || 'Sin rol'} clearable={false}
+                      options={roles.map(r => ({ value: r.codRol, label: `${r.nombre}${r.activo ? '' : ' (inactivo)'}` }))} />
                   </td>
                   <td className={tdCls}>
                     <div className="flex flex-col gap-1">
@@ -517,27 +504,22 @@ export default function SuperAdminPage() {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Campo etiqueta="Usuario" requerido>
-                <input value={usuarioEmpresaEdit.nombreUsuario} autoComplete="off"
+                <Input value={usuarioEmpresaEdit.nombreUsuario} autoComplete="off"
                   onChange={e => setUsuarioEmpresaEdit(x => x && ({ ...x, nombreUsuario: e.target.value }))}
-                  className={`${inputCls} font-mono`} style={inputStyle} />
+                  className="font-mono" />
               </Campo>
               <Campo etiqueta="Nueva contraseña (opcional)">
-                <div className="relative">
-                  <MdVpnKey size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: COLORES.tenue }} />
-                  <input type="password" value={usuarioEmpresaEdit.clave ?? ''} autoComplete="new-password"
-                    onChange={e => setUsuarioEmpresaEdit(x => x && ({ ...x, clave: e.target.value }))}
-                    className={`${inputCls} pl-9`} style={inputStyle} placeholder="Dejar vacío para no cambiarla" />
-                </div>
+                <Input type="password" value={usuarioEmpresaEdit.clave ?? ''} autoComplete="new-password"
+                  onChange={e => setUsuarioEmpresaEdit(x => x && ({ ...x, clave: e.target.value }))}
+                  icon={<MdVpnKey size={16} />} placeholder="Dejar vacío para no cambiarla" />
               </Campo>
               <Campo etiqueta="Nombre completo" requerido>
-                <input value={usuarioEmpresaEdit.nombreCompleto}
-                  onChange={e => setUsuarioEmpresaEdit(x => x && ({ ...x, nombreCompleto: e.target.value }))}
-                  className={inputCls} style={inputStyle} />
+                <Input value={usuarioEmpresaEdit.nombreCompleto}
+                  onChange={e => setUsuarioEmpresaEdit(x => x && ({ ...x, nombreCompleto: e.target.value }))} />
               </Campo>
               <Campo etiqueta="Cargo / descripción">
-                <input value={usuarioEmpresaEdit.descripcion ?? ''}
-                  onChange={e => setUsuarioEmpresaEdit(x => x && ({ ...x, descripcion: e.target.value }))}
-                  className={inputCls} style={inputStyle} />
+                <Input value={usuarioEmpresaEdit.descripcion ?? ''}
+                  onChange={e => setUsuarioEmpresaEdit(x => x && ({ ...x, descripcion: e.target.value }))} />
               </Campo>
             </div>
             <p className="text-xs" style={{ color: COLORES.tenue }}>
@@ -581,28 +563,23 @@ export default function SuperAdminPage() {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Campo etiqueta="Usuario" requerido>
-                <input value={superEdit.nombreUsuario} autoComplete="off"
+                <Input value={superEdit.nombreUsuario} autoComplete="off"
                   onChange={e => setSuperEdit(x => x && ({ ...x, nombreUsuario: e.target.value }))}
-                  className={`${inputCls} font-mono`} style={inputStyle} placeholder="jperez" />
+                  className="font-mono" placeholder="jperez" />
               </Campo>
               <Campo etiqueta={superEdit.codUsuario ? 'Nueva contraseña (opcional)' : 'Contraseña'} requerido={!superEdit.codUsuario}>
-                <div className="relative">
-                  <MdVpnKey size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: COLORES.tenue }} />
-                  <input type="password" value={superEdit.clave ?? ''} autoComplete="new-password"
-                    onChange={e => setSuperEdit(x => x && ({ ...x, clave: e.target.value }))}
-                    className={`${inputCls} pl-9`} style={inputStyle}
-                    placeholder={superEdit.codUsuario ? 'Dejar vacío para no cambiarla' : 'Mínimo 6 caracteres'} />
-                </div>
+                <Input type="password" value={superEdit.clave ?? ''} autoComplete="new-password"
+                  onChange={e => setSuperEdit(x => x && ({ ...x, clave: e.target.value }))}
+                  icon={<MdVpnKey size={16} />}
+                  placeholder={superEdit.codUsuario ? 'Dejar vacío para no cambiarla' : 'Mínimo 6 caracteres'} />
               </Campo>
               <Campo etiqueta="Nombre completo" requerido>
-                <input value={superEdit.nombreCompleto}
-                  onChange={e => setSuperEdit(x => x && ({ ...x, nombreCompleto: e.target.value }))}
-                  className={inputCls} style={inputStyle} />
+                <Input value={superEdit.nombreCompleto}
+                  onChange={e => setSuperEdit(x => x && ({ ...x, nombreCompleto: e.target.value }))} />
               </Campo>
               <Campo etiqueta="Cargo / descripción">
-                <input value={superEdit.descripcion ?? ''}
-                  onChange={e => setSuperEdit(x => x && ({ ...x, descripcion: e.target.value }))}
-                  className={inputCls} style={inputStyle} />
+                <Input value={superEdit.descripcion ?? ''}
+                  onChange={e => setSuperEdit(x => x && ({ ...x, descripcion: e.target.value }))} />
               </Campo>
             </div>
             <label className="flex items-center gap-2 text-sm" style={{ color: COLORES.texto }}
