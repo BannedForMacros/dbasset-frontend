@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { oficinaService, Oficina } from '../../../services/oficina.service';
 import { areaService, Area } from '../../../services/area.service';
+import Select from '@/app/components/Select';
 import { MdAdd, MdEdit, MdDelete } from 'react-icons/md';
 
 export default function OficinasPage() {
@@ -166,19 +167,12 @@ export default function OficinasPage() {
               {/* Selector de Área */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Área *</label>
-                <select
+                <Select
                   value={formData.codArea}
-                  onChange={(e) => setFormData({ ...formData, codArea: e.target.value })}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                >
-                  <option value="">-- Seleccione un Área --</option>
-                  {areas.map((area) => (
-                    <option key={area.codArea} value={area.codArea}>
-                      {area.nombreArea}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => setFormData({ ...formData, codArea: v })}
+                  placeholder="-- Seleccione un Área --"
+                  options={areas.map((area) => ({ value: area.codArea ?? '', label: area.nombreArea }))}
+                />
               </div>
 
               <div>
