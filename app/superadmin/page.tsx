@@ -46,6 +46,7 @@ export default function SuperAdminPage() {
   const [asignacion, setAsignacion] = useState<{ codUsuario: number | ''; codRol: number | '' }>({ codUsuario: '', codRol: '' });
   const [nuevoUsuario, setNuevoUsuario] = useState<UsuarioForm>(usuarioVacio);
   const [rolNuevo, setRolNuevo] = useState<number | ''>('');
+  const [usuarioEmpresaEdit, setUsuarioEmpresaEdit] = useState<(UsuarioForm & { codUsuario: number }) | null>(null);
 
   // Superadministradores
   const [verSuperadmins, setVerSuperadmins] = useState(false);
@@ -165,6 +166,38 @@ export default function SuperAdminPage() {
       setUsuariosEmpresa(lista);
       mostrar('ok', 'Usuario quitado de la empresa');
     } catch (err) { mostrar('error', mensajeError(err, 'No se pudo quitar el usuario')); }
+  };
+
+  const abrirEditarUsuarioEmpresa = (u: UsuarioEmpresa) => setUsuarioEmpresaEdit({
+    codUsuario: u.codUsuario,
+    nombreUsuario: u.nombreUsuario,
+    clave: '',
+    nombreCompleto: u.nombreCompleto,
+    descripcion: u.descripcion ?? '',
+    esSuperadmin: false,
+    activo: u.usuarioActivo,
+  });
+
+  const guardarUsuarioEmpresa = async () => {
+    if (!usuarioEmpresaEdit) return;
+    if (!usuarioEmpresaEdit.nombreUsuario.trim()) { mostrar('error', 'Indique el usuario'); return; }
+    if (!usuarioEmpresaEdit.nombreCompleto.trim()) { mostrar('error', 'Indique el nombre completo'); return; }
+    if (usuarioEmpresaEdit.clave && usuarioEmpresaEdit.clave.length < 6) {
+      mostrar('error', 'La nueva contraseña debe tener al menos 6 caracteres'); return;
+    }
+    setGuardando(true);
+    try {
+      await superadminService.actualizarUsuario(usuarioEmpresaEdit.codUsuario, {
+        ...usuarioEmpresaEdit,
+        nombreUsuario: usuarioEmpresaEdit.nombreUsuario.trim(),
+        nombreCompleto: usuarioEmpresaEdit.nombreCompleto.trim(),
+        esSuperadmin: false,
+      });
+      await refrescarGestion();
+      setUsuarioEmpresaEdit(null);
+      mostrar('ok', 'Datos del usuario actualizados');
+    } catch (err) { mostrar('error', mensajeError(err, 'No se pudo actualizar el usuario')); }
+    finally { setGuardando(false); }
   };
 
   const asignarExistente = async () => {
@@ -456,13 +489,60 @@ export default function SuperAdminPage() {
                     </div>
                   </td>
                   <td className={tdCls}>
-                    <Boton pequeno variante="peligro" onClick={() => quitarUsuario(u)} title="Quitar de la empresa">
-                      <MdDeleteOutline /> Quitar
-                    </Boton>
+                    <div className="flex flex-wrap gap-2">
+                      <Boton pequeno variante="secundario" onClick={() => abrirEditarUsuarioEmpresa(u)}>
+                        <MdEdit /> Editar
+                      </Boton>
+                      <Boton pequeno variante="peligro" onClick={() => quitarUsuario(u)} title="Quitar de la empresa">
+                        <MdDeleteOutline /> Quitar
+                      </Boton>
+                    </div>
                   </td>
                 </tr>
               ))}
             </Tabla>
+          </>
+        )}
+      </ModalBase>
+
+      {/* ── Modal: editar datos del usuario de la empresa ── */}
+      <ModalBase abierto={!!usuarioEmpresaEdit} onCerrar={() => setUsuarioEmpresaEdit(null)} ancho="max-w-2xl"
+        titulo={usuarioEmpresaEdit ? `Editar ${usuarioEmpresaEdit.nombreUsuario}` : ''}
+        subtitulo={gestion ? `Datos de acceso de ${gestion.razonSocial}` : ''}
+        pie={<>
+          <Boton variante="secundario" onClick={() => setUsuarioEmpresaEdit(null)}>Cancelar</Boton>
+          <Boton onClick={guardarUsuarioEmpresa} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Boton>
+        </>}>
+        {usuarioEmpresaEdit && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Campo etiqueta="Usuario" requerido>
+                <input value={usuarioEmpresaEdit.nombreUsuario} autoComplete="off"
+                  onChange={e => setUsuarioEmpresaEdit(x => x && ({ ...x, nombreUsuario: e.target.value }))}
+                  className={`${inputCls} font-mono`} style={inputStyle} />
+              </Campo>
+              <Campo etiqueta="Nueva contraseña (opcional)">
+                <div className="relative">
+                  <MdVpnKey size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: COLORES.tenue }} />
+                  <input type="password" value={usuarioEmpresaEdit.clave ?? ''} autoComplete="new-password"
+                    onChange={e => setUsuarioEmpresaEdit(x => x && ({ ...x, clave: e.target.value }))}
+                    className={`${inputCls} pl-9`} style={inputStyle} placeholder="Dejar vacío para no cambiarla" />
+                </div>
+              </Campo>
+              <Campo etiqueta="Nombre completo" requerido>
+                <input value={usuarioEmpresaEdit.nombreCompleto}
+                  onChange={e => setUsuarioEmpresaEdit(x => x && ({ ...x, nombreCompleto: e.target.value }))}
+                  className={inputCls} style={inputStyle} />
+              </Campo>
+              <Campo etiqueta="Cargo / descripción">
+                <input value={usuarioEmpresaEdit.descripcion ?? ''}
+                  onChange={e => setUsuarioEmpresaEdit(x => x && ({ ...x, descripcion: e.target.value }))}
+                  className={inputCls} style={inputStyle} />
+              </Campo>
+            </div>
+            <p className="text-xs" style={{ color: COLORES.tenue }}>
+              El rol y el acceso a la empresa se cambian desde la fila del usuario en la empresa.
+            </p>
           </>
         )}
       </ModalBase>
