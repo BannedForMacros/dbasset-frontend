@@ -47,13 +47,13 @@ export default function Sidebar() {
 
   const visible = (item: MenuItem) => !item.permiso || permisos === null || permisos.includes(item.permiso);
 
-  const companyInfo = (() => {
-    if (typeof window === 'undefined') return { ruc: '', razonSocial: '' };
-    const user = authService.getUserData();
-    if (user?.empresas && user.currentCompanyId) {
-    }
-    return { ruc: '', razonSocial: '' };
-  })();
+  // La sesión vive en localStorage: se lee después de montar para no desalinear la hidratación
+  const [companyInfo, setCompanyInfo] = useState({ ruc: '', razonSocial: '' });
+
+  useEffect(() => {
+    const empresa = authService.empresaActual();
+    if (empresa) setCompanyInfo({ ruc: empresa.ruc ?? '', razonSocial: empresa.razonSocial ?? '' });
+  }, [pathname]);
 
   const handleLogout = () => authService.logout();
   const handleChangeCompany = () => router.push('/select-company');
@@ -155,7 +155,9 @@ export default function Sidebar() {
               className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 text-xs font-bold text-white"
               style={{ backgroundColor: '#1e4786' }}
             >
-              DB
+              {companyInfo.razonSocial
+                .replace(/\b(S\.?A\.?C?\.?|S\.?R\.?L\.?|E\.?I\.?R\.?L\.?)$/i, '')
+                .split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'DB'}
             </div>
             <div className="overflow-hidden">
               <p
