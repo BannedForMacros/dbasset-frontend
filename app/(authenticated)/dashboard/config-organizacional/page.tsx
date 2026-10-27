@@ -1,27 +1,33 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authService } from '../../../services/auth.service';
 import { localService, Local } from '../../../services/local.service';
 import { areaService, Area } from '../../../services/area.service';
 import { oficinaService, Oficina } from '../../../services/oficina.service';
-import { 
-  MdAdd, 
-  MdEdit, 
-  MdDelete, 
-  MdBusiness, 
-  MdLayers, 
+import {
+  MdAdd,
+  MdEdit,
+  MdDelete,
+  MdBusiness,
+  MdLayers,
   MdMeetingRoom,
-  MdExpandMore,
   MdChevronRight,
-  MdSearch,
-  MdClear,
   MdViewList,
   MdAccountTree,
-  MdFilterList
+  MdPlace,
+  MdUnfoldMore,
+  MdUnfoldLess,
 } from 'react-icons/md';
 import Select from '@/app/components/Select';
+import Input from '@/app/components/Input';
+import IconButton from '@/app/components/IconButton';
+import {
+  PageHeader, Boton, Campo, ModalBase, Indicador, Buscador, TablaVacia,
+  COLORES, inputCls, inputStyle, useAviso,
+} from '@/app/components/rfid/ui';
+import { mensajeError } from '@/app/utils/exportar';
 
 type EntityType = 'local' | 'area' | 'oficina';
 
@@ -38,9 +44,62 @@ interface ExpandedState {
   [key: string]: boolean;
 }
 
+const FORM_VACIO: FormState = { nombre: '', codInterno: '', observacion: '', direccion: '', codLocal: '', codArea: '' };
+
+/* Cada nivel de la jerarquía con su color dentro de la paleta del panel */
+const NIVEL = {
+  local:   { nombre: 'Local',   plural: 'Locales',  icono: MdBusiness,    color: '#1e4786', fondo: 'rgba(30,71,134,0.08)' },
+  area:    { nombre: 'Área',    plural: 'Áreas',    icono: MdLayers,      color: '#0f9b76', fondo: 'rgba(34,196,161,0.12)' },
+  oficina: { nombre: 'Oficina', plural: 'Oficinas', icono: MdMeetingRoom, color: '#64748b', fondo: '#f1f5f9' },
+} as const;
+
+const normalizar = (t?: string | null) =>
+  (t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+const codLocalDe = (a: Area) => (a.local as Local)?.codLocal;
+const codAreaDe = (o: Oficina) => (o.area as Area)?.codArea;
+
+function IconoNivel({ tipo, size = 'md' }: { tipo: EntityType; size?: 'sm' | 'md' }) {
+  const n = NIVEL[tipo];
+  const Icono = n.icono;
+  const dim = size === 'md' ? 'w-10 h-10' : 'w-8 h-8';
+  return (
+    <div className={`${dim} rounded-xl flex items-center justify-center shrink-0`} style={{ backgroundColor: n.fondo, color: n.color }}>
+      <Icono size={size === 'md' ? 21 : 17} />
+    </div>
+  );
+}
+
+function Chevron({ abierto, onClick, deshabilitado, titulo }: {
+  abierto: boolean; onClick: () => void; deshabilitado: boolean; titulo: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={deshabilitado}
+      title={titulo}
+      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${deshabilitado ? '' : 'hover:bg-slate-100'}`}
+      style={{ color: deshabilitado ? '#e2e8f0' : COLORES.suave, cursor: deshabilitado ? 'default' : 'pointer' }}
+    >
+      <MdChevronRight size={22} className="transition-transform duration-200" style={{ transform: abierto ? 'rotate(90deg)' : 'none' }} />
+    </button>
+  );
+}
+
+function Contador({ valor, singular, plural }: { valor: number; singular: string; plural: string }) {
+  return (
+    <span className="text-xs whitespace-nowrap" style={{ color: COLORES.tenue }}>
+      <b style={{ color: COLORES.suave }}>{valor}</b> {valor === 1 ? singular : plural}
+    </span>
+  );
+}
+
 export default function ConfigOrganizacionalPage() {
   const router = useRouter();
+  const { mostrar, nodo } = useAviso();
   const [loading, setLoading] = useState(true);
+  const [guardando, setGuardando] = useState(false);
 
   const [locales, setLocales] = useState<Local[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -61,25 +120,17 @@ export default function ConfigOrganizacionalPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [parentContext, setParentContext] = useState<{ localId?: number; areaId?: number }>({});
-  
-  const [formData, setFormData] = useState<FormState>({
-    nombre: '',
-    codInterno: '',
-    observacion: '',
-    direccion: '',
-    codLocal: '',
-    codArea: ''
-  });
+  const [formData, setFormData] = useState<FormState>(FORM_VACIO);
 
   useEffect(() => {
     if (!authService.isAuthenticated()) {
       router.push('/login');
       return;
     }
-    cargarTodosDatos();
+    cargarTodosDatos(true);
   }, [router]);
 
-  const cargarTodosDatos = async () => {
+  const cargarTodosDatos = async (inicial = false) => {
     try {
       setLoading(true);
       const [localesData, areasData, oficinasData] = await Promise.all([
@@ -90,30 +141,48 @@ export default function ConfigOrganizacionalPage() {
       setLocales(localesData);
       setAreas(areasData);
       setOficinas(oficinasData);
+      // La primera vez se muestran las áreas de cada local
+      if (inicial) {
+        const abiertos: ExpandedState = {};
+        localesData.forEach(l => { if (l.codLocal) abiertos[l.codLocal] = true; });
+        setExpandedLocales(abiertos);
+      }
     } catch (error) {
       console.error('Error cargando datos:', error);
+      mostrar('error', 'No se pudo cargar la estructura organizacional');
     } finally {
       setLoading(false);
     }
   };
 
   const resetForm = () => {
-    setFormData({
-      nombre: '',
-      codInterno: '',
-      observacion: '',
-      direccion: '',
-      codLocal: '',
-      codArea: ''
-    });
+    setFormData(FORM_VACIO);
     setIsEditing(false);
     setEditingId(null);
     setParentContext({});
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
 
+    if (!formData.nombre.trim() || !formData.codInterno.trim()) {
+      mostrar('error', 'Complete el nombre y el código interno');
+      return;
+    }
+    if (modalType === 'local' && !formData.direccion.trim()) {
+      mostrar('error', 'Ingrese la dirección del local');
+      return;
+    }
+    if (modalType !== 'local' && !formData.codLocal) {
+      mostrar('error', 'Seleccione el local');
+      return;
+    }
+    if (modalType === 'oficina' && !formData.codArea) {
+      mostrar('error', 'Seleccione el área');
+      return;
+    }
+
+    setGuardando(true);
     try {
       if (modalType === 'local') {
         const payload: Local = {
@@ -152,17 +221,19 @@ export default function ConfigOrganizacionalPage() {
         }
       }
 
+      mostrar('ok', `${NIVEL[modalType].nombre} ${isEditing ? 'actualizado' : 'registrado'} correctamente`);
       closeModal();
       cargarTodosDatos();
     } catch (error) {
       console.error('Error al guardar:', error);
-      alert('Error al guardar');
+      mostrar('error', mensajeError(error, 'No se pudo guardar'));
+    } finally {
+      setGuardando(false);
     }
   };
 
-  const handleDelete = async (type: EntityType, id: number) => {
-    const entityNames = { local: 'Local', area: 'Área', oficina: 'Oficina' };
-    if (!confirm(`¿Está seguro de eliminar este ${entityNames[type]}?`)) return;
+  const handleDelete = async (type: EntityType, id: number, nombre: string) => {
+    if (!confirm(`¿Eliminar ${NIVEL[type].nombre.toLowerCase()} "${nombre}"?`)) return;
 
     try {
       if (type === 'local') {
@@ -172,10 +243,11 @@ export default function ConfigOrganizacionalPage() {
       } else {
         await oficinaService.eliminar(id);
       }
+      mostrar('ok', `${NIVEL[type].nombre} eliminado`);
       cargarTodosDatos();
     } catch (error) {
       console.error('Error al eliminar:', error);
-      alert('Error al eliminar');
+      mostrar('error', mensajeError(error, 'No se pudo eliminar; verifique que no tenga elementos o activos asociados'));
     }
   };
 
@@ -183,12 +255,11 @@ export default function ConfigOrganizacionalPage() {
     resetForm();
     setModalType(type);
     setParentContext(context || {});
-    if (context?.localId !== undefined) {
-      setFormData(prev => ({ ...prev, codLocal: context.localId!.toString() }));
-    }
-    if (context?.areaId !== undefined) {
-      setFormData(prev => ({ ...prev, codArea: context.areaId!.toString() }));
-    }
+    setFormData({
+      ...FORM_VACIO,
+      codLocal: context?.localId !== undefined ? context.localId.toString() : '',
+      codArea: context?.areaId !== undefined ? context.areaId.toString() : '',
+    });
     setShowModal(true);
   };
 
@@ -199,37 +270,28 @@ export default function ConfigOrganizacionalPage() {
     if (type === 'local') {
       const local = entity as Local;
       setEditingId(local.codLocal || null);
-      setFormData({
-        nombre: local.nombreLocal,
-        direccion: local.direccion,
-        codInterno: local.codInterno,
-        observacion: '',
-        codLocal: '',
-        codArea: ''
-      });
+      setFormData({ ...FORM_VACIO, nombre: local.nombreLocal, direccion: local.direccion, codInterno: local.codInterno });
     } else if (type === 'area') {
       const area = entity as Area;
       setEditingId(area.codArea || null);
       setFormData({
+        ...FORM_VACIO,
         nombre: area.nombreArea,
         observacion: area.observacion || '',
         codInterno: area.codInterno || '',
-        direccion: '',
-        codLocal: (area.local as Local)?.codLocal?.toString() || '',
-        codArea: ''
+        codLocal: codLocalDe(area)?.toString() || '',
       });
     } else {
       const oficina = entity as Oficina;
       setEditingId(oficina.codOficina || null);
-      const areaRelacionada = areas.find(a => a.codArea === (oficina.area as Area)?.codArea);
-      const localId = (areaRelacionada?.local as Local)?.codLocal?.toString() || '';
+      const areaRelacionada = areas.find(a => a.codArea === codAreaDe(oficina));
       setFormData({
+        ...FORM_VACIO,
         nombre: oficina.nombreOficina,
         observacion: oficina.observacion || '',
         codInterno: oficina.codInterno || '',
-        direccion: '',
-        codLocal: localId,
-        codArea: (oficina.area as Area)?.codArea?.toString() || ''
+        codLocal: areaRelacionada ? codLocalDe(areaRelacionada)?.toString() || '' : '',
+        codArea: codAreaDe(oficina)?.toString() || '',
       });
     }
     setShowModal(true);
@@ -251,12 +313,8 @@ export default function ConfigOrganizacionalPage() {
   const expandAll = () => {
     const newExpandedLocales: ExpandedState = {};
     const newExpandedAreas: ExpandedState = {};
-    locales.forEach(local => {
-      if (local.codLocal) newExpandedLocales[local.codLocal] = true;
-    });
-    areas.forEach(area => {
-      if (area.codArea) newExpandedAreas[area.codArea] = true;
-    });
+    locales.forEach(local => { if (local.codLocal) newExpandedLocales[local.codLocal] = true; });
+    areas.forEach(area => { if (area.codArea) newExpandedAreas[area.codArea] = true; });
     setExpandedLocales(newExpandedLocales);
     setExpandedAreas(newExpandedAreas);
   };
@@ -266,512 +324,285 @@ export default function ConfigOrganizacionalPage() {
     setExpandedAreas({});
   };
 
-  // Filtrado por búsqueda
-  const filteredData = () => {
-    if (!searchTerm.trim()) {
-      return { locales, areas, oficinas };
-    }
+  /* ── Índices por padre ── */
+  const areasPorLocal = useMemo(() => {
+    const m = new Map<number, Area[]>();
+    areas.forEach(a => {
+      const id = codLocalDe(a);
+      if (id == null) return;
+      m.set(id, [...(m.get(id) ?? []), a]);
+    });
+    return m;
+  }, [areas]);
 
-    const term = searchTerm.toLowerCase();
-    
-    const filteredLocales = locales.filter(local => 
-      local.nombreLocal.toLowerCase().includes(term) ||
-      local.direccion.toLowerCase().includes(term) ||
-      local.codInterno.toLowerCase().includes(term)
-    );
+  const oficinasPorArea = useMemo(() => {
+    const m = new Map<number, Oficina[]>();
+    oficinas.forEach(o => {
+      const id = codAreaDe(o);
+      if (id == null) return;
+      m.set(id, [...(m.get(id) ?? []), o]);
+    });
+    return m;
+  }, [oficinas]);
 
-    const filteredAreas = areas.filter(area =>
-      area.nombreArea.toLowerCase().includes(term) ||
-      (area.codInterno || '').toLowerCase().includes(term) ||
-      (area.local as Local)?.nombreLocal.toLowerCase().includes(term)
-    );
+  const oficinasDeLocal = (localId: number) =>
+    (areasPorLocal.get(localId) ?? []).reduce((acc, a) => acc + (oficinasPorArea.get(a.codArea!)?.length ?? 0), 0);
 
-    const filteredOficinas = oficinas.filter(oficina =>
-      oficina.nombreOficina.toLowerCase().includes(term) ||
-      (oficina.codInterno || '').toLowerCase().includes(term) ||
-      (oficina.area as Area)?.nombreArea.toLowerCase().includes(term)
-    );
+  /* ── Búsqueda: un nivel se muestra si coincide él o algún descendiente;
+        si coincide un padre se muestran todos sus hijos ── */
+  const termino = normalizar(searchTerm.trim());
+  const buscando = termino.length > 0;
+  const coincide = (...textos: (string | undefined | null)[]) => textos.some(t => normalizar(t).includes(termino));
 
-    return {
-      locales: filteredLocales,
-      areas: filteredAreas,
-      oficinas: filteredOficinas
-    };
-  };
+  const arbol = useMemo(() => {
+    return locales.map(local => {
+      const localCoincide = !buscando || coincide(local.nombreLocal, local.direccion, local.codInterno);
+      const hijos = (areasPorLocal.get(local.codLocal!) ?? []).map(area => {
+        const areaCoincide = localCoincide || coincide(area.nombreArea, area.codInterno, area.observacion);
+        const ofis = (oficinasPorArea.get(area.codArea!) ?? []).filter(o =>
+          areaCoincide || coincide(o.nombreOficina, o.codInterno, o.observacion));
+        return { area, oficinas: ofis, visible: areaCoincide || ofis.length > 0 };
+      }).filter(h => h.visible);
+      return { local, areas: hijos, visible: localCoincide || hijos.length > 0 };
+    }).filter(n => n.visible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locales, areasPorLocal, oficinasPorArea, termino]);
 
-  const { locales: visibleLocales, areas: visibleAreas, oficinas: visibleOficinas } = filteredData();
+  const getModalTitle = () => `${isEditing ? 'Editar' : 'Nuevo'} ${NIVEL[modalType].nombre.toLowerCase()}`;
 
-  const getAreasForLocal = (localId: number) => {
-    return visibleAreas.filter(area => (area.local as Local)?.codLocal === localId);
-  };
-
-  const getOficinasForArea = (areaId: number) => {
-    return visibleOficinas.filter(oficina => (oficina.area as Area)?.codArea === areaId);
-  };
-
-  const getModalTitle = () => {
-    const action = isEditing ? 'Editar' : 'Nuevo';
-    const entity = modalType === 'local' ? 'Local' : modalType === 'area' ? 'Área' : 'Oficina';
-    return `${action} ${entity}`;
-  };
-
-  const areasFiltradas_Form = formData.codLocal 
-    ? areas.filter(a => (a.local as Local)?.codLocal === Number(formData.codLocal))
+  const areasFiltradas_Form = formData.codLocal
+    ? areas.filter(a => codLocalDe(a) === Number(formData.codLocal))
     : [];
 
-  const totalCount = locales.length + areas.length + oficinas.length;
-
-  // Función para obtener datos de tabla filtrados
-  const getTableData = () => {
-    if (tableEntityType === 'local') {
-      return visibleLocales;
-    } else if (tableEntityType === 'area') {
-      return visibleAreas.filter(area => {
-        if (!filtroLocalTabla) return true;
-        return (area.local as Local)?.codLocal === Number(filtroLocalTabla);
-      });
-    } else {
-      return visibleOficinas.filter(oficina => {
-        const areaRelacionada = areas.find(a => a.codArea === (oficina.area as Area)?.codArea);
-        const localId = (areaRelacionada?.local as Local)?.codLocal;
-
-        if (filtroLocalTabla && localId !== Number(filtroLocalTabla)) return false;
-        if (filtroAreaTabla && (oficina.area as Area)?.codArea !== Number(filtroAreaTabla)) return false;
-        
-        return true;
-      });
-    }
-  };
-
-  const tableData = getTableData();
+  // Datos de la vista de tabla
+  const tablaLocales = locales.filter(l => !buscando || coincide(l.nombreLocal, l.direccion, l.codInterno));
+  const tablaAreas = areas.filter(area =>
+    (!filtroLocalTabla || codLocalDe(area) === Number(filtroLocalTabla))
+    && (!buscando || coincide(area.nombreArea, area.codInterno, area.observacion, (area.local as Local)?.nombreLocal)));
+  const tablaOficinas = oficinas.filter(oficina => {
+    const areaRelacionada = areas.find(a => a.codArea === codAreaDe(oficina));
+    const localId = areaRelacionada ? codLocalDe(areaRelacionada) : undefined;
+    if (filtroLocalTabla && localId !== Number(filtroLocalTabla)) return false;
+    if (filtroAreaTabla && codAreaDe(oficina) !== Number(filtroAreaTabla)) return false;
+    return !buscando || coincide(oficina.nombreOficina, oficina.codInterno, oficina.observacion, (oficina.area as Area)?.nombreArea);
+  });
+  const totalTabla = tableEntityType === 'local' ? tablaLocales.length : tableEntityType === 'area' ? tablaAreas.length : tablaOficinas.length;
+  const totalEntidad = tableEntityType === 'local' ? locales.length : tableEntityType === 'area' ? areas.length : oficinas.length;
 
   // Áreas filtradas por local para el select en oficinas
-  const areasParaTablaOficinas = filtroLocalTabla 
-    ? areas.filter(a => (a.local as Local)?.codLocal === Number(filtroLocalTabla))
+  const areasParaTablaOficinas = filtroLocalTabla
+    ? areas.filter(a => codLocalDe(a) === Number(filtroLocalTabla))
     : areas;
 
+  const nombreLocal = (id?: string) => locales.find(l => l.codLocal === Number(id))?.nombreLocal;
+  const nombreArea = (id?: string) => areas.find(a => a.codArea === Number(id))?.nombreArea;
+
+  const acciones = (tipo: EntityType, entidad: Local | Area | Oficina, id: number, nombre: string, extra?: ReactNode) => (
+    <div className="flex items-center justify-end gap-1.5">
+      {extra}
+      <IconButton variant="edit" icon={<MdEdit size={17} />} title={`Editar ${NIVEL[tipo].nombre.toLowerCase()}`}
+        onClick={() => openEditModal(tipo, entidad)} />
+      <IconButton variant="delete" icon={<MdDelete size={17} />} title={`Eliminar ${NIVEL[tipo].nombre.toLowerCase()}`}
+        onClick={() => handleDelete(tipo, id, nombre)} />
+    </div>
+  );
+
   return (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">Estructura Organizacional</h1>
-          <p className="text-gray-600 mt-1">Vista jerárquica de Locales, Áreas y Oficinas</p>
-          <div className="flex items-center gap-4 mt-3">
-            <div className="flex items-center gap-2 text-sm">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 rounded-lg">
-                <MdBusiness className="text-blue-600" size={18} />
-                <span className="font-semibold text-blue-900">{locales.length}</span>
-                <span className="text-blue-700">Locales</span>
-              </div>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 rounded-lg">
-                <MdLayers className="text-purple-600" size={18} />
-                <span className="font-semibold text-purple-900">{areas.length}</span>
-                <span className="text-purple-700">Áreas</span>
-              </div>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 rounded-lg">
-                <MdMeetingRoom className="text-green-600" size={18} />
-                <span className="font-semibold text-green-900">{oficinas.length}</span>
-                <span className="text-green-700">Oficinas</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={() => openNewModal('local')}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition shadow-lg font-medium"
-        >
-          <MdAdd size={22} />
-          <span>Nuevo Local</span>
-        </button>
+    <div className="space-y-6">
+      {nodo}
+
+      <PageHeader
+        titulo="Estructura organizacional"
+        subtitulo="Locales, áreas y oficinas donde se ubican los activos"
+        icono={<MdAccountTree size={15} />}
+        acciones={<Boton onClick={() => openNewModal('local')}><MdAdd size={19} /> Nuevo local</Boton>}
+      />
+
+      {/* Indicadores */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Indicador etiqueta="Locales" valor={loading ? '—' : locales.length} icono={<MdBusiness size={22} />} tono="marca"
+          detalle="Sedes, almacenes y sucursales" />
+        <Indicador etiqueta="Áreas" valor={loading ? '—' : areas.length} icono={<MdLayers size={22} />} tono="acento"
+          detalle={locales.length ? `${(areas.length / locales.length).toFixed(1)} por local en promedio` : undefined} />
+        <Indicador etiqueta="Oficinas" valor={loading ? '—' : oficinas.length} icono={<MdMeetingRoom size={22} />} tono="neutro"
+          detalle="Ubicación final del activo" />
       </div>
 
-      {/* Barra de búsqueda y controles */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="flex-1 relative">
-            <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar en toda la estructura organizacional..."
-              className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <MdClear size={20} />
-              </button>
-            )}
-          </div>
-          
-          {/* Toggle de Vista */}
-          <div className="flex bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('tree')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium text-sm ${
-                viewMode === 'tree'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <MdAccountTree size={18} />
-              Jerárquica
-            </button>
-            <button
-              onClick={() => setViewMode('table')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium text-sm ${
-                viewMode === 'table'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <MdViewList size={18} />
-              Tabla
-            </button>
-          </div>
+      <div className="tabla-marco">
+        {/* Barra de herramientas */}
+        <div className="tabla-barra">
+          <Buscador valor={searchTerm} onCambio={setSearchTerm} placeholder="Buscar local, área u oficina…" className="sm:max-w-sm" />
 
-          {viewMode === 'tree' && (
-            <>
-              <button
-                onClick={expandAll}
-                className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium text-sm"
-              >
-                Expandir Todo
+          <div className="flex flex-wrap items-center gap-2">
+            {viewMode === 'tree' && (
+              <>
+                <Boton pequeno variante="secundario" onClick={expandAll} title="Expandir todo"><MdUnfoldMore size={16} /> Expandir</Boton>
+                <Boton pequeno variante="secundario" onClick={collapseAll} title="Contraer todo"><MdUnfoldLess size={16} /> Contraer</Boton>
+              </>
+            )}
+            <div className="segmentado">
+              <button type="button" data-activo={viewMode === 'tree'} onClick={() => setViewMode('tree')}>
+                <MdAccountTree size={16} /> Jerarquía
               </button>
-              <button
-                onClick={collapseAll}
-                className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium text-sm"
-              >
-                Contraer Todo
+              <button type="button" data-activo={viewMode === 'table'} onClick={() => setViewMode('table')}>
+                <MdViewList size={16} /> Tabla
               </button>
-            </>
-          )}
+            </div>
+          </div>
         </div>
 
-        {/* Selector de Entidad y Filtros para Vista de Tabla */}
+        {/* Selector de entidad y filtros de la vista de tabla */}
         {viewMode === 'table' && (
-          <div className="flex items-center gap-3 pt-3 border-t border-gray-200">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-gray-700">Mostrar:</span>
-              <div className="flex bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => {
-                    setTableEntityType('local');
-                    setFiltroLocalTabla('');
-                    setFiltroAreaTabla('');
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition text-sm font-medium ${
-                    tableEntityType === 'local'
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <MdBusiness size={16} />
-                  Locales
-                </button>
-                <button
-                  onClick={() => {
-                    setTableEntityType('area');
-                    setFiltroAreaTabla('');
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition text-sm font-medium ${
-                    tableEntityType === 'area'
-                      ? 'bg-white text-purple-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <MdLayers size={16} />
-                  Áreas
-                </button>
-                <button
-                  onClick={() => setTableEntityType('oficina')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition text-sm font-medium ${
-                    tableEntityType === 'oficina'
-                      ? 'bg-white text-green-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <MdMeetingRoom size={16} />
-                  Oficinas
-                </button>
-              </div>
+          <div className="tabla-barra" style={{ backgroundColor: '#fafafa' }}>
+            <div className="segmentado" style={{ backgroundColor: '#eef2f6' }}>
+              {(['local', 'area', 'oficina'] as EntityType[]).map(tipo => {
+                const Icono = NIVEL[tipo].icono;
+                return (
+                  <button key={tipo} type="button" data-activo={tableEntityType === tipo}
+                    onClick={() => {
+                      setTableEntityType(tipo);
+                      if (tipo === 'local') setFiltroLocalTabla('');
+                      setFiltroAreaTabla('');
+                    }}>
+                    <Icono size={15} /> {NIVEL[tipo].plural}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Filtros */}
             {tableEntityType !== 'local' && (
-              <div className="flex items-center gap-2 ml-auto">
-                <MdFilterList className="text-gray-500" size={18} />
-                <Select
-                  value={filtroLocalTabla}
-                  onChange={(v) => {
-                    setFiltroLocalTabla(v);
-                    if (tableEntityType === 'oficina') {
-                      setFiltroAreaTabla('');
-                    }
-                  }}
-                  placeholder="Todos los Locales"
-                  size="sm"
-                  options={locales.map((loc) => ({ value: loc.codLocal ?? '', label: loc.nombreLocal }))}
-                />
-
-                {tableEntityType === 'oficina' && (
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="w-56">
                   <Select
-                    value={filtroAreaTabla}
-                    onChange={(v) => setFiltroAreaTabla(v)}
-                    disabled={!filtroLocalTabla}
-                    placeholder="Todas las Áreas"
+                    value={filtroLocalTabla}
+                    onChange={(v) => { setFiltroLocalTabla(v); setFiltroAreaTabla(''); }}
+                    placeholder="Todos los locales"
                     size="sm"
-                    options={areasParaTablaOficinas.map((area) => ({ value: area.codArea ?? '', label: area.nombreArea }))}
+                    options={locales.map((loc) => ({ value: loc.codLocal ?? '', label: loc.nombreLocal }))}
                   />
-                )}
-
-                {(filtroLocalTabla || filtroAreaTabla) && (
-                  <button
-                    onClick={() => {
-                      setFiltroLocalTabla('');
-                      setFiltroAreaTabla('');
-                    }}
-                    className="px-3 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition font-medium"
-                  >
-                    Limpiar
-                  </button>
+                </div>
+                {tableEntityType === 'oficina' && (
+                  <div className="w-56">
+                    <Select
+                      value={filtroAreaTabla}
+                      onChange={(v) => setFiltroAreaTabla(v)}
+                      placeholder="Todas las áreas"
+                      size="sm"
+                      options={areasParaTablaOficinas.map((area) => ({ value: area.codArea ?? '', label: area.nombreArea }))}
+                    />
+                  </div>
                 )}
               </div>
             )}
           </div>
         )}
-      </div>
 
-      {/* Vista Jerárquica o Tabla */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-10 w-10 border-2 border-t-transparent" style={{ borderColor: COLORES.brand, borderTopColor: 'transparent' }} />
           </div>
         ) : viewMode === 'tree' ? (
-          /* VISTA JERÁRQUICA */
-          visibleLocales.length === 0 ? (
-            <div className="text-center py-20">
-              <MdBusiness className="mx-auto text-gray-300 mb-4" size={64} />
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                {searchTerm ? 'No se encontraron resultados' : 'No hay locales registrados'}
-              </h3>
-              <p className="text-gray-500 mb-6">
-                {searchTerm ? 'Intenta con otros términos de búsqueda' : 'Comienza creando tu primer local'}
+          /* ───────────── VISTA JERÁRQUICA ───────────── */
+          arbol.length === 0 ? (
+            <div className="text-center py-16 px-4">
+              <div className="mx-auto mb-4 w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#f1f5f9', color: '#94a3b8' }}>
+                <MdBusiness size={30} />
+              </div>
+              <p className="font-semibold" style={{ color: COLORES.texto }}>
+                {buscando ? 'No se encontraron resultados' : 'Aún no hay locales registrados'}
               </p>
-              {!searchTerm && (
-                <button
-                  onClick={() => openNewModal('local')}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
-                >
-                  <MdAdd size={20} />
-                  Crear Primer Local
-                </button>
+              <p className="text-sm mt-1 mb-5" style={{ color: COLORES.tenue }}>
+                {buscando ? 'Pruebe con otro nombre o código' : 'Empiece creando la sede principal de la empresa'}
+              </p>
+              {!buscando && (
+                <div className="inline-flex"><Boton onClick={() => openNewModal('local')}><MdAdd size={19} /> Crear primer local</Boton></div>
               )}
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
-              {visibleLocales.map((local) => {
-                const localAreas = getAreasForLocal(local.codLocal!);
-                const isExpanded = expandedLocales[local.codLocal!];
-                const hasAreas = localAreas.length > 0;
+            <div>
+              {arbol.map(({ local, areas: hijos }) => {
+                const localId = local.codLocal!;
+                const totalAreas = areasPorLocal.get(localId)?.length ?? 0;
+                const abierto = buscando || !!expandedLocales[localId];
 
                 return (
-                  <div key={local.codLocal} className="hover:bg-gray-50/50 transition">
-                    {/* Local Row */}
-                    <div className="flex items-center px-6 py-4 gap-3">
-                      <button
-                        onClick={() => toggleLocal(local.codLocal!)}
-                        className={`p-2 rounded-lg border transition-all duration-200 transform hover:scale-105 ${
-                          hasAreas 
-                            ? 'border-blue-300 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 text-blue-600 cursor-pointer' 
-                            : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
-                        }`}
-                        disabled={!hasAreas}
-                        title={hasAreas ? "Click para expandir/contraer áreas" : "No tiene áreas para mostrar"}
-                      >
-                        {isExpanded ? (
-                          <MdExpandMore size={22} className="transition-transform duration-200" />
-                        ) : (
-                          <MdChevronRight size={22} className="transition-transform duration-200" />
-                        )}
-                      </button>
-
-                      <div className="flex items-center gap-3 flex-1">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                          <MdBusiness className="text-blue-600" size={24} />
+                  <div key={localId} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    {/* Fila del local */}
+                    <div className="group flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[#f8fbff]">
+                      <Chevron abierto={abierto} onClick={() => toggleLocal(localId)} deshabilitado={totalAreas === 0}
+                        titulo={totalAreas ? 'Mostrar u ocultar áreas' : 'Sin áreas'} />
+                      <IconoNivel tipo="local" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-bold truncate" style={{ color: COLORES.texto }}>{local.nombreLocal}</h3>
+                          <span className="codigo">{local.codInterno}</span>
                         </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <h3 className="font-bold text-gray-900 text-lg">{local.nombreLocal}</h3>
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 font-mono">
-                              {local.codInterno}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 mt-0.5">{local.direccion}</p>
-                          <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                            <span className="flex items-center gap-1">
-                              <MdLayers size={14} />
-                              {localAreas.length} {localAreas.length === 1 ? 'área' : 'áreas'}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <MdMeetingRoom size={14} />
-                              {localAreas.reduce((acc, area) => acc + getOficinasForArea(area.codArea!).length, 0)} oficinas
-                            </span>
-                          </div>
-                        </div>
+                        <p className="text-sm mt-0.5 flex items-center gap-1 truncate" style={{ color: COLORES.suave }}>
+                          <MdPlace size={14} className="shrink-0" style={{ color: COLORES.tenue }} />
+                          <span className="truncate">{local.direccion || 'Sin dirección'}</span>
+                        </p>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openNewModal('area', { localId: local.codLocal })}
-                          className="px-3 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition text-sm font-medium flex items-center gap-1.5"
-                          title="Agregar Área"
-                        >
-                          <MdAdd size={18} />
-                          Área
-                        </button>
-                        <button
-                          onClick={() => openEditModal('local', local)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                          title="Editar Local"
-                        >
-                          <MdEdit size={20} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete('local', local.codLocal!)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                          title="Eliminar Local"
-                        >
-                          <MdDelete size={20} />
-                        </button>
+                      <div className="hidden md:flex items-center gap-4 mr-2">
+                        <Contador valor={totalAreas} singular="área" plural="áreas" />
+                        <Contador valor={oficinasDeLocal(localId)} singular="oficina" plural="oficinas" />
                       </div>
+                      {acciones('local', local, localId, local.nombreLocal,
+                        <Boton pequeno variante="exito" title="Agregar área" onClick={() => openNewModal('area', { localId })}>
+                          <MdAdd size={15} /> Área
+                        </Boton>
+                      )}
                     </div>
 
-                    {/* Áreas del Local */}
-                    {isExpanded && hasAreas && (
-                      <div className="bg-gradient-to-r from-purple-50/30 to-transparent">
-                        {localAreas.map((area) => {
-                          const areaOficinas = getOficinasForArea(area.codArea!);
-                          const isAreaExpanded = expandedAreas[area.codArea!];
-                          const hasOficinas = areaOficinas.length > 0;
+                    {/* Áreas del local */}
+                    {abierto && hijos.length > 0 && (
+                      <div className="pb-2">
+                        {hijos.map(({ area, oficinas: ofis }) => {
+                          const areaId = area.codArea!;
+                          const totalOficinas = oficinasPorArea.get(areaId)?.length ?? 0;
+                          const areaAbierta = buscando || !!expandedAreas[areaId];
 
                           return (
-                            <div key={area.codArea} className="border-l-2 border-purple-200 ml-12">
-                              {/* Area Row */}
-                              <div className="flex items-center px-6 py-3 gap-3">
-                                <button
-                                  onClick={() => toggleArea(area.codArea!)}
-                                  className={`p-1.5 rounded-lg border transition-all duration-200 transform hover:scale-105 ${
-                                    hasOficinas 
-                                      ? 'border-purple-300 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 text-purple-600 cursor-pointer' 
-                                      : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
-                                  }`}
-                                  disabled={!hasOficinas}
-                                  title={hasOficinas ? "Click para expandir/contraer oficinas" : "No tiene oficinas para mostrar"}
-                                >
-                                  {isAreaExpanded ? (
-                                    <MdExpandMore size={20} className="transition-transform duration-200" />
-                                  ) : (
-                                    <MdChevronRight size={20} className="transition-transform duration-200" />
+                            <div key={areaId} className="ml-[3.25rem] mr-4" style={{ borderLeft: '2px solid #e2e8f0' }}>
+                              <div className="flex items-center gap-3 pl-3 pr-0 py-2.5 rounded-r-xl transition-colors hover:bg-[#f8fbff]">
+                                <Chevron abierto={areaAbierta} onClick={() => toggleArea(areaId)} deshabilitado={totalOficinas === 0}
+                                  titulo={totalOficinas ? 'Mostrar u ocultar oficinas' : 'Sin oficinas'} />
+                                <IconoNivel tipo="area" size="sm" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h4 className="font-semibold text-sm truncate" style={{ color: COLORES.texto }}>{area.nombreArea}</h4>
+                                    {area.codInterno && <span className="codigo">{area.codInterno}</span>}
+                                  </div>
+                                  {area.observacion && (
+                                    <p className="text-xs mt-0.5 truncate" style={{ color: COLORES.tenue }}>{area.observacion}</p>
                                   )}
-                                </button>
-
-                                <div className="flex items-center gap-3 flex-1">
-                                  <div className="p-1.5 bg-purple-100 rounded-lg">
-                                    <MdLayers className="text-purple-600" size={20} />
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <h4 className="font-semibold text-gray-900">{area.nombreArea}</h4>
-                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 font-mono">
-                                        {area.codInterno}
-                                      </span>
-                                    </div>
-                                    {area.observacion && (
-                                      <p className="text-sm text-gray-600 mt-0.5">{area.observacion}</p>
-                                    )}
-                                    <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500">
-                                      <MdMeetingRoom size={14} />
-                                      {areaOficinas.length} {areaOficinas.length === 1 ? 'oficina' : 'oficinas'}
-                                    </div>
-                                  </div>
                                 </div>
-
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => openNewModal('oficina', { 
-                                      localId: local.codLocal, 
-                                      areaId: area.codArea 
-                                    })}
-                                    className="px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition text-sm font-medium flex items-center gap-1.5"
-                                    title="Agregar Oficina"
-                                  >
-                                    <MdAdd size={16} />
-                                    Oficina
-                                  </button>
-                                  <button
-                                    onClick={() => openEditModal('area', area)}
-                                    className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition"
-                                    title="Editar Área"
-                                  >
-                                    <MdEdit size={18} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDelete('area', area.codArea!)}
-                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                                    title="Eliminar Área"
-                                  >
-                                    <MdDelete size={18} />
-                                  </button>
+                                <div className="hidden md:block mr-2">
+                                  <Contador valor={totalOficinas} singular="oficina" plural="oficinas" />
                                 </div>
+                                {acciones('area', area, areaId, area.nombreArea,
+                                  <Boton pequeno variante="secundario" title="Agregar oficina"
+                                    onClick={() => openNewModal('oficina', { localId, areaId })}>
+                                    <MdAdd size={15} /> Oficina
+                                  </Boton>
+                                )}
                               </div>
 
-                              {/* Oficinas del Área */}
-                              {isAreaExpanded && hasOficinas && (
-                                <div className="bg-gradient-to-r from-green-50/30 to-transparent">
-                                  {areaOficinas.map((oficina) => (
-                                    <div key={oficina.codOficina} className="border-l-2 border-green-200 ml-12">
-                                      <div className="flex items-center px-6 py-3 gap-3">
-                                        <div className="w-5" /> {/* Spacer */}
-                                        
-                                        <div className="flex items-center gap-3 flex-1">
-                                          <div className="p-1.5 bg-green-100 rounded-lg">
-                                            <MdMeetingRoom className="text-green-600" size={18} />
-                                          </div>
-                                          <div className="flex-1">
-                                            <div className="flex items-center gap-2">
-                                              <h5 className="font-medium text-gray-900">{oficina.nombreOficina}</h5>
-                                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 font-mono">
-                                                {oficina.codInterno}
-                                              </span>
-                                            </div>
-                                            {oficina.observacion && (
-                                              <p className="text-sm text-gray-600 mt-0.5">{oficina.observacion}</p>
-                                            )}
-                                          </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-2">
-                                          <button
-                                            onClick={() => openEditModal('oficina', oficina)}
-                                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
-                                            title="Editar Oficina"
-                                          >
-                                            <MdEdit size={18} />
-                                          </button>
-                                          <button
-                                            onClick={() => handleDelete('oficina', oficina.codOficina!)}
-                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                                            title="Eliminar Oficina"
-                                          >
-                                            <MdDelete size={18} />
-                                          </button>
-                                        </div>
+                              {/* Oficinas del área */}
+                              {areaAbierta && ofis.length > 0 && (
+                                <div className="ml-[2.6rem] mb-1.5" style={{ borderLeft: '2px solid #f1f5f9' }}>
+                                  {ofis.map(oficina => (
+                                    <div key={oficina.codOficina}
+                                      className="group/ofi flex items-center gap-3 pl-3 py-2 rounded-r-xl transition-colors hover:bg-[#f8fbff]">
+                                      <MdMeetingRoom size={16} className="shrink-0" style={{ color: COLORES.tenue }} />
+                                      <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                        <span className="text-sm font-medium" style={{ color: COLORES.texto }}>{oficina.nombreOficina}</span>
+                                        {oficina.codInterno && <span className="codigo">{oficina.codInterno}</span>}
+                                        {oficina.observacion && (
+                                          <span className="text-xs" style={{ color: COLORES.tenue }}>· {oficina.observacion}</span>
+                                        )}
+                                      </div>
+                                      <div className="opacity-0 group-hover/ofi:opacity-100 focus-within:opacity-100 transition-opacity">
+                                        {acciones('oficina', oficina, oficina.codOficina!, oficina.nombreOficina)}
                                       </div>
                                     </div>
                                   ))}
@@ -788,210 +619,101 @@ export default function ConfigOrganizacionalPage() {
             </div>
           )
         ) : (
-          /* VISTA DE TABLA */
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className={`${
-                tableEntityType === 'local' ? 'bg-blue-50 border-b-2 border-blue-200' :
-                tableEntityType === 'area' ? 'bg-purple-50 border-b-2 border-purple-200' :
-                'bg-green-50 border-b-2 border-green-200'
-              }`}>
+          /* ───────────── VISTA DE TABLA ───────────── */
+          <div className="tabla-scroll">
+            <table className="tabla">
+              <thead>
                 <tr>
                   {tableEntityType === 'local' && (
                     <>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Nombre del Local</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Dirección</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Código</th>
-                      <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">Áreas</th>
-                      <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">Oficinas</th>
-                      <th className="px-6 py-4 text-right text-sm font-bold text-gray-700">Acciones</th>
+                      <th>Local</th>
+                      <th>Dirección</th>
+                      <th>Código</th>
+                      <th className="col-centro">Áreas</th>
+                      <th className="col-centro">Oficinas</th>
+                      <th className="col-acciones">Acciones</th>
                     </>
                   )}
                   {tableEntityType === 'area' && (
                     <>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Nombre del Área</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Local</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Código</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Observación</th>
-                      <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">Oficinas</th>
-                      <th className="px-6 py-4 text-right text-sm font-bold text-gray-700">Acciones</th>
+                      <th>Área</th>
+                      <th>Local</th>
+                      <th>Código</th>
+                      <th>Observación</th>
+                      <th className="col-centro">Oficinas</th>
+                      <th className="col-acciones">Acciones</th>
                     </>
                   )}
                   {tableEntityType === 'oficina' && (
                     <>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Nombre de Oficina</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Área</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Local</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Código</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Observación</th>
-                      <th className="px-6 py-4 text-right text-sm font-bold text-gray-700">Acciones</th>
+                      <th>Oficina</th>
+                      <th>Área</th>
+                      <th>Local</th>
+                      <th>Código</th>
+                      <th>Observación</th>
+                      <th className="col-acciones">Acciones</th>
                     </>
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {tableData.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center">
-                      <div className="flex flex-col items-center justify-center text-gray-500">
-                        {tableEntityType === 'local' && <MdBusiness size={48} className="mb-3 text-gray-300" />}
-                        {tableEntityType === 'area' && <MdLayers size={48} className="mb-3 text-gray-300" />}
-                        {tableEntityType === 'oficina' && <MdMeetingRoom size={48} className="mb-3 text-gray-300" />}
-                        <p className="text-lg font-semibold">
-                          {searchTerm || filtroLocalTabla || filtroAreaTabla
-                            ? 'No se encontraron resultados con los filtros aplicados'
-                            : `No hay ${tableEntityType === 'local' ? 'locales' : tableEntityType === 'area' ? 'áreas' : 'oficinas'} registradas`
-                          }
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
+              <tbody>
+                {totalTabla === 0 ? (
+                  <TablaVacia
+                    columnas={6}
+                    icono={(() => { const Icono = NIVEL[tableEntityType].icono; return <Icono size={40} />; })()}
+                    texto={buscando || filtroLocalTabla || filtroAreaTabla
+                      ? 'No hay resultados con los filtros aplicados'
+                      : `No hay ${NIVEL[tableEntityType].plural.toLowerCase()} registrados`}
+                  />
                 ) : tableEntityType === 'local' ? (
-                  (tableData as Local[]).map((local) => {
-                    const localAreas = getAreasForLocal(local.codLocal!);
-                    const totalOficinas = localAreas.reduce((acc, area) => acc + getOficinasForArea(area.codArea!).length, 0);
-                    return (
-                      <tr key={local.codLocal} className="hover:bg-blue-50/30 transition">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <MdBusiness className="text-blue-600" size={20} />
-                            <span className="font-semibold text-gray-900">{local.nombreLocal}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-gray-600">{local.direccion}</td>
-                        <td className="px-6 py-4">
-                          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 font-mono">
-                            {local.codInterno}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-100 text-purple-700 font-bold text-sm">
-                            {localAreas.length}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold text-sm">
-                            {totalOficinas}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() => openEditModal('local', local)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                              title="Editar"
-                            >
-                              <MdEdit size={18} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete('local', local.codLocal!)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                              title="Eliminar"
-                            >
-                              <MdDelete size={18} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
+                  tablaLocales.map((local) => (
+                    <tr key={local.codLocal}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <IconoNivel tipo="local" size="sm" />
+                          <span className="font-semibold">{local.nombreLocal}</span>
+                        </div>
+                      </td>
+                      <td className="col-tenue">{local.direccion}</td>
+                      <td><span className="codigo">{local.codInterno}</span></td>
+                      <td className="col-centro font-semibold">{areasPorLocal.get(local.codLocal!)?.length ?? 0}</td>
+                      <td className="col-centro font-semibold">{oficinasDeLocal(local.codLocal!)}</td>
+                      <td className="col-acciones">{acciones('local', local, local.codLocal!, local.nombreLocal)}</td>
+                    </tr>
+                  ))
                 ) : tableEntityType === 'area' ? (
-                  (tableData as Area[]).map((area) => {
-                    const areaOficinas = getOficinasForArea(area.codArea!);
-                    return (
-                      <tr key={area.codArea} className="hover:bg-purple-50/30 transition">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <MdLayers className="text-purple-600" size={20} />
-                            <span className="font-semibold text-gray-900">{area.nombreArea}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <MdBusiness className="text-blue-600" size={16} />
-                            <span className="text-gray-700">{(area.local as Local)?.nombreLocal || 'Sin Local'}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 font-mono">
-                            {area.codInterno}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-gray-600 text-sm">{area.observacion || '-'}</td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold text-sm">
-                            {areaOficinas.length}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() => openEditModal('area', area)}
-                              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition"
-                              title="Editar"
-                            >
-                              <MdEdit size={18} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete('area', area.codArea!)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                              title="Eliminar"
-                            >
-                              <MdDelete size={18} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
+                  tablaAreas.map((area) => (
+                    <tr key={area.codArea}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <IconoNivel tipo="area" size="sm" />
+                          <span className="font-semibold">{area.nombreArea}</span>
+                        </div>
+                      </td>
+                      <td className="col-tenue">{(area.local as Local)?.nombreLocal || 'Sin local'}</td>
+                      <td><span className="codigo">{area.codInterno || '—'}</span></td>
+                      <td className="col-tenue">{area.observacion || '—'}</td>
+                      <td className="col-centro font-semibold">{oficinasPorArea.get(area.codArea!)?.length ?? 0}</td>
+                      <td className="col-acciones">{acciones('area', area, area.codArea!, area.nombreArea)}</td>
+                    </tr>
+                  ))
                 ) : (
-                  (tableData as Oficina[]).map((oficina) => {
-                    const areaRelacionada = areas.find(a => a.codArea === (oficina.area as Area)?.codArea);
-                    const localRelacionado = areaRelacionada ? locales.find(l => l.codLocal === (areaRelacionada.local as Local)?.codLocal) : null;
+                  tablaOficinas.map((oficina) => {
+                    const areaRelacionada = areas.find(a => a.codArea === codAreaDe(oficina));
+                    const localRelacionado = areaRelacionada ? locales.find(l => l.codLocal === codLocalDe(areaRelacionada)) : null;
                     return (
-                      <tr key={oficina.codOficina} className="hover:bg-green-50/30 transition">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <MdMeetingRoom className="text-green-600" size={20} />
-                            <span className="font-semibold text-gray-900">{oficina.nombreOficina}</span>
+                      <tr key={oficina.codOficina}>
+                        <td>
+                          <div className="flex items-center gap-3">
+                            <IconoNivel tipo="oficina" size="sm" />
+                            <span className="font-semibold">{oficina.nombreOficina}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <MdLayers className="text-purple-600" size={16} />
-                            <span className="text-gray-700">{(oficina.area as Area)?.nombreArea || 'Sin Área'}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <MdBusiness className="text-blue-600" size={16} />
-                            <span className="text-gray-700">{localRelacionado?.nombreLocal || 'Sin Local'}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 font-mono">
-                            {oficina.codInterno}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-gray-600 text-sm">{oficina.observacion || '-'}</td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() => openEditModal('oficina', oficina)}
-                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
-                              title="Editar"
-                            >
-                              <MdEdit size={18} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete('oficina', oficina.codOficina!)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                              title="Eliminar"
-                            >
-                              <MdDelete size={18} />
-                            </button>
-                          </div>
-                        </td>
+                        <td className="col-tenue">{(oficina.area as Area)?.nombreArea || 'Sin área'}</td>
+                        <td className="col-tenue">{localRelacionado?.nombreLocal || 'Sin local'}</td>
+                        <td><span className="codigo">{oficina.codInterno || '—'}</span></td>
+                        <td className="col-tenue">{oficina.observacion || '—'}</td>
+                        <td className="col-acciones">{acciones('oficina', oficina, oficina.codOficina!, oficina.nombreOficina)}</td>
                       </tr>
                     );
                   })
@@ -1000,200 +722,130 @@ export default function ConfigOrganizacionalPage() {
             </table>
           </div>
         )}
+
+        {!loading && viewMode === 'table' && totalTabla > 0 && (
+          <div className="tabla-pie">
+            <span>
+              {totalTabla === totalEntidad
+                ? `${totalEntidad} ${totalEntidad === 1 ? NIVEL[tableEntityType].nombre.toLowerCase() : NIVEL[tableEntityType].plural.toLowerCase()}`
+                : `${totalTabla} de ${totalEntidad} ${NIVEL[tableEntityType].plural.toLowerCase()}`}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Modal Dinámico */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg my-8 max-h-[90vh] flex flex-col">
-            <div className={`px-6 py-4 border-b flex justify-between items-center rounded-t-xl flex-shrink-0 ${
-              modalType === 'local' ? 'bg-gradient-to-r from-blue-600 to-blue-700' :
-              modalType === 'area' ? 'bg-gradient-to-r from-purple-600 to-purple-700' :
-              'bg-gradient-to-r from-green-600 to-green-700'
-            }`}>
-              <div className="flex items-center gap-3">
-                {modalType === 'local' && <MdBusiness className="text-white" size={24} />}
-                {modalType === 'area' && <MdLayers className="text-white" size={24} />}
-                {modalType === 'oficina' && <MdMeetingRoom className="text-white" size={24} />}
-                <h2 className="text-xl font-bold text-white">{getModalTitle()}</h2>
-              </div>
-              <button onClick={closeModal} className="text-white/80 hover:text-white text-2xl">&times;</button>
+      {/* Modal de alta / edición */}
+      <ModalBase
+        abierto={showModal}
+        onCerrar={closeModal}
+        ancho="max-w-lg"
+        titulo={getModalTitle()}
+        subtitulo={
+          modalType === 'local' ? 'Sede, almacén o sucursal de la empresa'
+            : modalType === 'area' ? 'División dentro de un local'
+            : 'Ambiente dentro de un área, donde se ubican los activos'
+        }
+        pie={<>
+          <Boton variante="secundario" onClick={closeModal} disabled={guardando}>Cancelar</Boton>
+          <Boton onClick={() => handleSubmit()} disabled={guardando}>
+            {guardando ? 'Guardando…' : isEditing ? 'Guardar cambios' : 'Registrar'}
+          </Boton>
+        </>}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Ubicación dentro de la jerarquía */}
+          {modalType !== 'local' && formData.codLocal && (
+            <div className="flex flex-wrap items-center gap-1.5 text-sm rounded-xl px-3 py-2.5"
+              style={{ backgroundColor: '#f8fafc', border: `1px solid ${COLORES.borde}`, color: COLORES.suave }}>
+              <MdBusiness size={16} style={{ color: NIVEL.local.color }} />
+              <span className="font-medium" style={{ color: COLORES.texto }}>{nombreLocal(formData.codLocal)}</span>
+              {modalType === 'oficina' && formData.codArea && (
+                <>
+                  <MdChevronRight size={16} style={{ color: COLORES.tenue }} />
+                  <MdLayers size={16} style={{ color: NIVEL.area.color }} />
+                  <span className="font-medium" style={{ color: COLORES.texto }}>{nombreArea(formData.codArea)}</span>
+                </>
+              )}
             </div>
+          )}
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
-              
-              {/* Contexto Visual */}
-              {(modalType === 'area' || modalType === 'oficina') && (
-                <div className={`p-4 rounded-lg border-2 ${
-                  modalType === 'area' ? 'bg-blue-50 border-blue-200' : 'bg-purple-50 border-purple-200'
-                }`}>
-                  <div className="text-sm font-semibold text-gray-700 mb-2">Estructura:</div>
-                  <div className="space-y-1">
-                    {modalType === 'area' && formData.codLocal && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <MdBusiness className="text-blue-600" size={16} />
-                        <span className="font-medium text-gray-900">
-                          {locales.find(l => l.codLocal === Number(formData.codLocal))?.nombreLocal}
-                        </span>
-                      </div>
-                    )}
-                    {modalType === 'oficina' && formData.codLocal && (
-                      <>
-                        <div className="flex items-center gap-2 text-sm">
-                          <MdBusiness className="text-blue-600" size={16} />
-                          <span className="font-medium text-gray-900">
-                            {locales.find(l => l.codLocal === Number(formData.codLocal))?.nombreLocal}
-                          </span>
-                        </div>
-                        {formData.codArea && (
-                          <div className="flex items-center gap-2 text-sm ml-4">
-                            <MdLayers className="text-purple-600" size={16} />
-                            <span className="font-medium text-gray-900">
-                              {areas.find(a => a.codArea === Number(formData.codArea))?.nombreArea}
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
+          {modalType !== 'local' && (
+            <Select
+              label="Local"
+              required
+              value={formData.codLocal}
+              onChange={(v) => setFormData({ ...formData, codLocal: v, codArea: '' })}
+              disabled={!!parentContext.localId || isEditing}
+              placeholder="Seleccione un local"
+              options={locales.map((loc) => ({ value: loc.codLocal ?? '', label: `${loc.nombreLocal} (${loc.codInterno})` }))}
+            />
+          )}
 
-              {/* Selección de Local (para Áreas y Oficinas) */}
-              {(modalType === 'area' || modalType === 'oficina') && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <div className="flex items-center gap-2">
-                      <MdBusiness className="text-blue-600" size={18} />
-                      Local (Sede) <span className="text-red-500">*</span>
-                      {isEditing && (modalType === 'area' || modalType === 'oficina') && (
-                        <span className="text-xs text-gray-500 font-normal ml-2">(No editable)</span>
-                      )}
-                    </div>
-                  </label>
-                  <Select
-                    value={formData.codLocal}
-                    onChange={(v) => setFormData({ ...formData, codLocal: v, codArea: '' })}
-                    disabled={!!parentContext.localId || (isEditing && (modalType === 'area' || modalType === 'oficina'))}
-                    placeholder="-- Seleccione un Local --"
-                    options={locales.map((loc) => ({ value: loc.codLocal ?? '', label: `${loc.nombreLocal} (${loc.codInterno})` }))}
-                  />
-                </div>
-              )}
+          {modalType === 'oficina' && (
+            <Select
+              label="Área"
+              required
+              value={formData.codArea}
+              onChange={(v) => setFormData({ ...formData, codArea: v })}
+              disabled={!formData.codLocal || !!parentContext.areaId || isEditing}
+              placeholder={formData.codLocal ? 'Seleccione un área' : 'Primero seleccione un local'}
+              options={areasFiltradas_Form.map((area) => ({ value: area.codArea ?? '', label: `${area.nombreArea} (${area.codInterno})` }))}
+            />
+          )}
 
-              {/* Selección de Área (solo para Oficinas) */}
-              {modalType === 'oficina' && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <div className="flex items-center gap-2">
-                      <MdLayers className="text-purple-600" size={18} />
-                      Área <span className="text-red-500">*</span>
-                      {isEditing && (
-                        <span className="text-xs text-gray-500 font-normal ml-2">(No editable)</span>
-                      )}
-                    </div>
-                  </label>
-                  <Select
-                    value={formData.codArea}
-                    onChange={(v) => setFormData({ ...formData, codArea: v })}
-                    disabled={!formData.codLocal || !!parentContext.areaId || isEditing}
-                    placeholder={formData.codLocal ? '-- Seleccione un Área --' : '-- Primero seleccione un Local --'}
-                    options={areasFiltradas_Form.map((area) => ({ value: area.codArea ?? '', label: `${area.nombreArea} (${area.codInterno})` }))}
-                  />
-                </div>
-              )}
+          {isEditing && modalType !== 'local' && (
+            <p className="text-xs -mt-2" style={{ color: COLORES.tenue }}>
+              La ubicación dentro de la estructura no se puede cambiar al editar.
+            </p>
+          )}
 
-              {/* Nombre */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Nombre de {modalType === 'local' ? 'Local' : modalType === 'area' ? 'Área' : 'Oficina'} 
-                  <span className="text-red-500"> *</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  required
-                  placeholder={`Ej: ${
-                    modalType === 'local' ? 'Sede Central' : 
-                    modalType === 'area' ? 'Recursos Humanos' : 
-                    'Oficina 101'
-                  }`}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-
-              {/* Dirección (solo para Locales) */}
-              {modalType === 'local' && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Dirección <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.direccion}
-                    onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
-                    required
-                    placeholder="Ej: Av. Principal 123, Lima"
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-              )}
-
-              {/* Código Interno */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Código Interno <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.codInterno}
-                  onChange={(e) => setFormData({ ...formData, codInterno: e.target.value })}
-                  required
-                  placeholder="Ej: LOC-001, ARE-001, OFI-001"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono"
-                />
-              </div>
-
-              {/* Observación (para Áreas y Oficinas) */}
-              {modalType !== 'local' && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Observación
-                  </label>
-                  <textarea
-                    value={formData.observacion}
-                    onChange={(e) => setFormData({ ...formData, observacion: e.target.value })}
-                    placeholder="Descripción adicional (opcional)"
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none"
-                  />
-                </div>
-              )}
-
-              {/* Footer con botones - fijo en la parte inferior */}
-              <div className="flex gap-3 pt-4 border-t border-gray-100 flex-shrink-0 bg-white sticky bottom-0">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="flex-1 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className={`flex-1 px-4 py-2.5 text-white font-medium rounded-lg transition shadow-md ${
-                    modalType === 'local' ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800' :
-                    modalType === 'area' ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800' :
-                    'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800'
-                  }`}
-                >
-                  {isEditing ? 'Actualizar' : 'Guardar'}
-                </button>
-              </div>
-            </form>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Input
+              containerClassName="sm:col-span-2"
+              label="Nombre"
+              required
+              autoFocus
+              value={formData.nombre}
+              onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+              placeholder={modalType === 'local' ? 'Ej: Sede Central' : modalType === 'area' ? 'Ej: Recursos Humanos' : 'Ej: Oficina 101'}
+            />
+            <Input
+              label="Código"
+              required
+              value={formData.codInterno}
+              onChange={(e) => setFormData({ ...formData, codInterno: e.target.value })}
+              placeholder={modalType === 'local' ? 'LOC-001' : modalType === 'area' ? 'ARE-001' : 'OFI-001'}
+              className="font-mono"
+            />
           </div>
-        </div>
-      )}
+
+          {modalType === 'local' && (
+            <Input
+              label="Dirección"
+              required
+              value={formData.direccion}
+              onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+              placeholder="Ej: Av. Principal 123, Lima"
+            />
+          )}
+
+          {modalType !== 'local' && (
+            <Campo etiqueta="Observación">
+              <textarea
+                value={formData.observacion}
+                onChange={(e) => setFormData({ ...formData, observacion: e.target.value })}
+                placeholder="Descripción adicional (opcional)"
+                rows={3}
+                className={`${inputCls} resize-none`}
+                style={inputStyle}
+              />
+            </Campo>
+          )}
+
+          {/* Enter en un campo envía el formulario */}
+          <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
+        </form>
+      </ModalBase>
     </div>
   );
 }
