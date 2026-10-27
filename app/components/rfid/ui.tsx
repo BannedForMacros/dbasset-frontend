@@ -3,7 +3,7 @@
 /* Piezas de interfaz de los módulos RFID, con la misma paleta que el resto del panel. */
 
 import { ReactNode, useCallback, useState } from 'react';
-import { MdClose, MdCheckCircle, MdError, MdInfo } from 'react-icons/md';
+import { MdClose, MdCheckCircle, MdError, MdInfo, MdSearch } from 'react-icons/md';
 
 export const COLORES = {
   brand: '#1e4786',
@@ -35,7 +35,7 @@ export function PageHeader({ titulo, subtitulo, icono, acciones }: {
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl ${className}`} style={{ backgroundColor: '#fff', border: `1.5px solid ${COLORES.borde}` }}>
+    <div className={`rounded-2xl overflow-hidden ${className}`} style={{ backgroundColor: '#fff', border: `1.5px solid ${COLORES.borde}` }}>
       {children}
     </div>
   );
@@ -118,25 +118,23 @@ export function ModalBase({ abierto, titulo, subtitulo, onCerrar, children, pie,
   );
 }
 
-export function Tabla({ columnas, children, vacio, cargando }: {
-  columnas: string[]; children: ReactNode; vacio?: boolean; cargando?: boolean;
+/* Tabla con el estilo único del panel (clases .tabla de globals.css) */
+export function Tabla({ columnas, children, vacio, cargando, compacta }: {
+  columnas: string[]; children: ReactNode; vacio?: boolean; cargando?: boolean; compacta?: boolean;
 }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
+    <div className="tabla-scroll">
+      <table className={`tabla${compacta ? ' tabla-compacta' : ''}`}>
         <thead>
-          <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
-            {columnas.map((c, i) => (
-              <th key={`${i}-${c}`}className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
-                style={{ color: COLORES.tenue, backgroundColor: '#fafafa' }}>{c}</th>
-            ))}
+          <tr>
+            {columnas.map((c, i) => <th key={`${i}-${c}`}>{c}</th>)}
           </tr>
         </thead>
         <tbody>
           {cargando ? (
-            <tr><td colSpan={columnas.length} className="px-4 py-10 text-center text-sm" style={{ color: COLORES.tenue }}>Cargando…</td></tr>
+            <TablaVacia columnas={columnas.length} texto="Cargando…" />
           ) : vacio ? (
-            <tr><td colSpan={columnas.length} className="px-4 py-10 text-center text-sm" style={{ color: COLORES.tenue }}>Sin registros</td></tr>
+            <TablaVacia columnas={columnas.length} />
           ) : children}
         </tbody>
       </table>
@@ -144,7 +142,64 @@ export function Tabla({ columnas, children, vacio, cargando }: {
   );
 }
 
-export const tdCls = 'px-4 py-3 text-sm align-top';
+export function TablaVacia({ columnas, texto = 'Sin registros', icono, detalle }: {
+  columnas: number; texto?: string; icono?: ReactNode; detalle?: ReactNode;
+}) {
+  return (
+    <tr>
+      <td colSpan={columnas} className="tabla-vacio">
+        <div className="flex flex-col items-center gap-2">
+          {icono && <span style={{ color: '#cbd5e1' }}>{icono}</span>}
+          <p className="font-medium">{texto}</p>
+          {detalle && <div className="text-xs">{detalle}</div>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+export const tdCls = 'align-top';
+
+export function Buscador({ valor, onCambio, placeholder = 'Buscar…', className = '' }: {
+  valor: string; onCambio: (v: string) => void; placeholder?: string; className?: string;
+}) {
+  return (
+    <div className={`buscador ${className}`}>
+      <MdSearch size={17} />
+      <input type="text" value={valor} onChange={e => onCambio(e.target.value)} placeholder={placeholder} />
+      {valor && (
+        <button type="button" onClick={() => onCambio('')} aria-label="Limpiar búsqueda"><MdClose size={16} /></button>
+      )}
+    </div>
+  );
+}
+
+/* Indicador numérico (KPI) */
+export function Indicador({ etiqueta, valor, icono, tono = 'marca', detalle }: {
+  etiqueta: string; valor: ReactNode; icono?: ReactNode; tono?: 'marca' | 'acento' | 'alerta' | 'error' | 'neutro'; detalle?: ReactNode;
+}) {
+  const t = {
+    marca:  { bg: 'rgba(30,71,134,0.08)',  color: '#1e4786' },
+    acento: { bg: 'rgba(34,196,161,0.12)', color: '#0f9b76' },
+    alerta: { bg: 'rgba(245,158,11,0.12)', color: '#b45309' },
+    error:  { bg: 'rgba(239,68,68,0.1)',   color: '#dc2626' },
+    neutro: { bg: '#f1f5f9',               color: '#64748b' },
+  }[tono];
+  return (
+    <div className="rounded-2xl p-4 flex items-center gap-3.5" style={{ backgroundColor: '#fff', border: `1.5px solid ${COLORES.borde}` }}>
+      {icono && (
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: t.bg, color: t.color }}>
+          {icono}
+        </div>
+      )}
+      <div className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-wider truncate" style={{ color: COLORES.tenue }}>{etiqueta}</p>
+        <p className="text-2xl font-bold leading-tight" style={{ color: COLORES.texto }}>{valor}</p>
+        {detalle && <p className="text-xs mt-0.5" style={{ color: COLORES.suave }}>{detalle}</p>}
+      </div>
+    </div>
+  );
+}
 
 export function Pastilla({ texto, tono = 'neutro' }: { texto: string; tono?: 'ok' | 'alerta' | 'error' | 'neutro' | 'marca' }) {
   const t = {

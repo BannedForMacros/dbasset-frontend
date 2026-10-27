@@ -10,6 +10,7 @@ import {
   MdLocationOn, MdFilterList, MdClose, MdSave,
   MdSearch, MdClear, MdLayers, MdMeetingRoom, MdDomain
 } from 'react-icons/md';
+import IconButton from '@/app/components/IconButton';
 import Select from '@/app/components/Select';
 
 // --- COMPONENTE AVATAR SIMPLE ---
@@ -253,26 +254,26 @@ export default function ResponsablesPage() {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase font-bold tracking-wider text-left">
+      <div className="tabla-marco">
+        <div className="tabla-scroll">
+          <table className="tabla">
+            <thead>
               <tr>
-                <th className="px-6 py-4">Custodio</th>
-                <th className="px-6 py-4">Oficinas Asignadas</th>
-                <th className="px-6 py-4">Código</th>
-                <th className="px-6 py-4 text-right">Acciones</th>
+                <th>Custodio</th>
+                <th>Oficinas Asignadas</th>
+                <th>Código</th>
+                <th className="col-acciones">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-sm">
+            <tbody>
               {loading ? (
-                <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">Cargando...</td></tr>
+                <tr><td colSpan={4} className="tabla-vacio">Cargando...</td></tr>
               ) : responsablesFiltrados.length === 0 ? (
-                <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">No se encontraron registros</td></tr>
+                <tr><td colSpan={4} className="tabla-vacio">No se encontraron registros</td></tr>
               ) : (
                 responsablesFiltrados.map((resp) => (
-                  <tr key={resp.codResponsable} className="hover:bg-blue-50/30 transition">
-                    <td className="px-6 py-4">
+                  <tr key={resp.codResponsable}>
+                    <td>
                       <div className="flex items-center gap-3">
                         <UserAvatar name={resp.nombreResponsable} />
                         <div>
@@ -281,7 +282,7 @@ export default function ResponsablesPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td>
                       <div className="flex flex-col gap-1">
                         {resp.oficinas && resp.oficinas.length > 0 ? (
                           resp.oficinas.map((ofi, idx) => {
@@ -298,15 +299,15 @@ export default function ResponsablesPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded font-mono text-xs font-bold border border-gray-200">
+                    <td>
+                      <span className="codigo">
                         {resp.codInterno || 'N/A'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => handleEdit(resp)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition"><MdEdit size={18}/></button>
-                        <button onClick={() => resp.codResponsable && handleDelete(resp.codResponsable)} className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"><MdDelete size={18}/></button>
+                    <td className="col-acciones">
+                      <div className="flex justify-end gap-1.5">
+                        <IconButton variant="edit" icon={<MdEdit size={17} />} title="Editar" onClick={() => handleEdit(resp)} />
+                        <IconButton variant="delete" icon={<MdDelete size={17} />} title="Eliminar" onClick={() => resp.codResponsable && handleDelete(resp.codResponsable)} />
                       </div>
                     </td>
                   </tr>
@@ -315,8 +316,8 @@ export default function ResponsablesPage() {
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 text-right text-xs text-gray-500">
-          Total: {responsablesFiltrados.length} registros
+        <div className="tabla-pie">
+          <span>{responsablesFiltrados.length} registro{responsablesFiltrados.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
 

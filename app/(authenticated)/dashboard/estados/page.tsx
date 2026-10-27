@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { estadoService, Estado } from '../../../services/estado.service';
 import { MdAdd, MdEdit, MdDelete } from 'react-icons/md';
 import { DataTable } from '../../../components/common/DataTable';
+import IconButton from '../../../components/IconButton';
 import { useTableSearch } from '../../../hooks/useTableSearch';
 
 export default function EstadosPage() {
@@ -96,29 +97,16 @@ export default function EstadosPage() {
         data={filteredData}
         columns={[
           { header: 'Estado' },
-          { header: 'Acciones', className: 'text-right w-32' }
+          { header: 'Acciones', className: 'col-acciones' }
         ]}
         renderRow={(estado: Estado, index: number) => (
-          <tr key={estado.codEstado || index} className="hover:bg-gray-50 transition">
-            <td className="px-6 py-4">
-              <span className="font-semibold text-gray-900">{estado.nombreEstado}</span>
-            </td>
-            <td className="px-6 py-4 text-right">
-              <div className="flex justify-end gap-2">
-                <button 
-                  onClick={() => handleEdit(estado)} 
-                  className="p-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition"
-                  title="Editar"
-                >
-                  <MdEdit size={20} />
-                </button>
-                <button 
-                  onClick={() => estado.codEstado && handleDelete(estado.codEstado)} 
-                  className="p-2 border-2 border-red-600 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition"
-                  title="Eliminar"
-                >
-                  <MdDelete size={20} />
-                </button>
+          <tr key={estado.codEstado || index}>
+            <td className="font-semibold">{estado.nombreEstado}</td>
+            <td className="col-acciones">
+              <div className="flex justify-end gap-1.5">
+                <IconButton variant="edit" icon={<MdEdit size={17} />} title="Editar" onClick={() => handleEdit(estado)} />
+                <IconButton variant="delete" icon={<MdDelete size={17} />} title="Eliminar"
+                  onClick={() => estado.codEstado && handleDelete(estado.codEstado)} />
               </div>
             </td>
           </tr>

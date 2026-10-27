@@ -54,12 +54,11 @@ export default function ModalDetalleCarga({ open, carga, detalles, onClose }: Pr
 
         {/* Tabla */}
         <div className="overflow-y-auto flex-1">
-          <table className="w-full">
-            <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-              <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
-                {['#', 'Código', 'Descripción', 'Responsable', 'Fecha Inv.', 'Observación', 'Estado'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider"
-                    style={{ color: '#94a3b8', backgroundColor: '#fafafa' }}>{h}</th>
+          <table className="tabla tabla-fija">
+            <thead>
+              <tr>
+                {['#', 'Código', 'Descripción', 'Custodio', 'Fecha inv.', 'Observación', 'Estado'].map(h => (
+                  <th key={h} className={h === '#' ? 'col-num' : undefined}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -67,22 +66,22 @@ export default function ModalDetalleCarga({ open, carga, detalles, onClose }: Pr
               {detalles.map((d, i) => {
                 const esInv = d.inventariado?.trim() === '1';
                 return (
-                  <tr key={d.id ?? i} style={{ borderBottom: '1px solid #f8fafc', backgroundColor: esInv ? 'rgba(34,196,161,0.02)' : 'transparent' }}>
-                    <td className="px-4 py-3 text-xs font-mono font-bold" style={{ color: '#cbd5e1' }}>{i + 1}</td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}>{d.codActivo}</span>
+                  <tr key={d.id ?? i} data-marcada={esInv}>
+                    <td className="col-num text-xs font-mono font-bold" style={{ color: '#cbd5e1' }}>{i + 1}</td>
+                    <td>
+                      <span className="codigo">{d.codActivo}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm" style={{ color: '#0f172a', minWidth: 160 }}>{d.activo?.descripcion ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm" style={{ color: '#64748b' }}>{d.responsable?.nombreResponsable ?? '—'}</td>
-                    <td className="px-4 py-3 text-xs" style={{ minWidth: 130 }}>
+                    <td style={{ minWidth: 160 }}>{d.activo?.descripcion ?? '—'}</td>
+                    <td className="col-tenue">{d.responsable?.nombreResponsable ?? '—'}</td>
+                    <td className="text-xs" style={{ minWidth: 130 }}>
                       {d.fechainventario
                         ? <span className="inline-flex items-center px-2 py-0.5 rounded-lg" style={{ backgroundColor: 'rgba(30,71,134,0.06)', color: '#1e4786' }}>{d.fechainventario}</span>
                         : <span style={{ color: '#e2e8f0' }}>—</span>}
                     </td>
-                    <td className="px-4 py-3 text-xs" style={{ color: '#64748b', maxWidth: 200 }}>
+                    <td className="text-xs col-tenue" style={{ maxWidth: 200 }}>
                       {d.obs ? <span className="block truncate" title={d.obs}>{d.obs}</span> : <span style={{ color: '#e2e8f0' }}>—</span>}
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       {esInv
                         ? <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: 'rgba(34,196,161,0.1)', color: '#0f9b76' }}><MdCheckCircle size={13} /> Inventariado</span>
                         : <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: 'rgba(148,163,184,0.1)', color: '#94a3b8' }}><MdPendingActions size={13} /> Pendiente</span>}

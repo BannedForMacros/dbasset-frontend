@@ -211,3 +211,171 @@ html, body {
   to   { opacity: 1; }
 }
 .animate-overlay-in { animation: overlayIn 0.18s ease-out; }
+
+/* =====================================================================
+   Tablas: un único estilo para todo el panel.
+   <div class="tabla-marco">           tarjeta contenedora
+     <div class="tabla-barra">…</div>   buscador / filtros (opcional)
+     <div class="tabla-scroll">
+       <table class="tabla">…</table>   + tabla-compacta / tabla-fija
+     </div>
+     <div class="tabla-pie">…</div>     totales (opcional)
+   </div>
+   En @layer components para que una utilidad de Tailwind pueda ajustar
+   una celda puntual sin pelear con estas reglas.
+   ===================================================================== */
+@layer components {
+  .tabla-marco {
+    background-color: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 1rem;
+    overflow: hidden;
+  }
+  .tabla-barra {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .tabla-scroll { overflow-x: auto; }
+
+  .tabla {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    color: #0f172a;
+  }
+  .tabla thead th {
+    padding: 0.7rem 1rem;
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: #64748b;
+    background-color: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .tabla tbody td {
+    padding: 0.75rem 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .tabla tbody tr:last-child td { border-bottom: none; }
+  .tabla tbody tr { transition: background-color 0.12s ease; }
+  .tabla tbody tr:hover { background-color: #f8fbff; }
+  .tabla tbody tr[data-seleccionada="true"] { background-color: rgba(30, 71, 134, 0.06); }
+  .tabla tbody tr[data-marcada="true"] { background-color: rgba(34, 196, 161, 0.06); }
+  .tabla tbody tr[data-clic="true"] { cursor: pointer; }
+
+  .tabla .col-centro { text-align: center; }
+  .tabla .col-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tabla .col-acciones { text-align: right; white-space: nowrap; width: 1%; }
+  .tabla .col-check { width: 2.5rem; padding-right: 0; }
+  .tabla .col-tenue { color: #64748b; }
+
+  .tabla-compacta thead th { padding: 0.55rem 0.75rem; }
+  .tabla-compacta tbody td { padding: 0.5rem 0.75rem; font-size: 0.8125rem; }
+  .tabla-fija thead th { position: sticky; top: 0; z-index: 1; }
+
+  .tabla .tabla-vacio {
+    padding: 3rem 1rem;
+    text-align: center;
+    font-size: 0.875rem;
+    color: #94a3b8;
+  }
+  .tabla tbody tr:hover:has(> .tabla-vacio) { background-color: transparent; }
+
+  .tabla-pie {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.7rem 1rem;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    background-color: #fafafa;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  /* Código interno / identificador dentro de una celda */
+  .codigo {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 0.375rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    color: #475569;
+    background-color: #f1f5f9;
+    border: 1px solid #e2e8f0;
+  }
+
+  /* Buscador de las barras de tabla */
+  .buscador {
+    position: relative;
+    width: 100%;
+    max-width: 20rem;
+  }
+  .buscador > svg {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    pointer-events: none;
+  }
+  .buscador input {
+    width: 100%;
+    padding: 0.5rem 2rem 0.5rem 2.25rem;
+    font-size: 0.875rem;
+    color: #0f172a;
+    background-color: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 0.55rem;
+  }
+  .buscador input::placeholder { color: #94a3b8; }
+  .buscador button {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 0.15rem;
+    border-radius: 0.375rem;
+    color: #94a3b8;
+  }
+  .buscador button:hover { color: #1e4786; }
+
+  /* Selector segmentado (vistas, pestañas pequeñas) */
+  .segmentado {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border-radius: 0.7rem;
+    background-color: #f1f5f9;
+  }
+  .segmentado button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #64748b;
+    transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .segmentado button:hover { color: #0f172a; }
+  .segmentado button[data-activo="true"] {
+    color: #1e4786;
+    background-color: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+  }
+}

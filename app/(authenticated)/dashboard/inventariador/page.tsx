@@ -8,6 +8,7 @@ import {
   MdClose, MdSave, MdAssignmentInd, MdEmail, 
   MdPhone, MdBadge, MdLock, MdVisibility, MdVisibilityOff
 } from 'react-icons/md';
+import IconButton from '@/app/components/IconButton';
 
 // --- COMPONENTE AVATAR ---
 const UserAvatar = ({ name }: { name: string }) => {
@@ -179,35 +180,35 @@ export default function InventariadoresPage() {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase font-bold tracking-wider text-left">
+      <div className="tabla-marco">
+        <div className="tabla-scroll">
+          <table className="tabla">
+            <thead>
               <tr>
-                <th className="px-6 py-4">Inventariador</th>
-                <th className="px-6 py-4">DNI</th>
-                <th className="px-6 py-4">Contacto</th>
-                <th className="px-6 py-4">Código</th>
-                <th className="px-6 py-4 text-right">Acciones</th>
+                <th>Inventariador</th>
+                <th>DNI</th>
+                <th>Contacto</th>
+                <th>Código</th>
+                <th className="col-acciones">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-sm">
+            <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-gray-500">
+                  <td colSpan={5} className="tabla-vacio">
                     Cargando...
                   </td>
                 </tr>
               ) : inventariadoresFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-gray-500">
+                  <td colSpan={5} className="tabla-vacio">
                     No se encontraron registros
                   </td>
                 </tr>
               ) : (
                 inventariadoresFiltrados.map((inv) => (
-                  <tr key={inv.codInventariador} className="hover:bg-green-50/30 transition">
-                    <td className="px-6 py-4">
+                  <tr key={inv.codInventariador}>
+                    <td>
                       <div className="flex items-center gap-3">
                         <UserAvatar name={inv.nombre} />
                         <div>
@@ -218,13 +219,13 @@ export default function InventariadoresPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td>
                       <span className="flex items-center gap-1.5 text-gray-700">
                         <MdBadge className="text-gray-400" size={16}/>
                         {inv.dni || <span className="text-gray-400 italic">No registrado</span>}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td>
                       <div className="flex flex-col gap-1">
                         {inv.telefono && (
                           <span className="flex items-center gap-1.5 text-gray-700 text-xs">
@@ -241,27 +242,15 @@ export default function InventariadoresPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded font-mono text-xs font-bold border border-gray-200">
+                    <td>
+                      <span className="codigo">
                         {inv.codInterno || 'N/A'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button 
-                          onClick={() => handleEdit(inv)} 
-                          className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition"
-                          title="Editar"
-                        >
-                          <MdEdit size={18}/>
-                        </button>
-                        <button 
-                          onClick={() => inv.codInventariador && handleDelete(inv.codInventariador)} 
-                          className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"
-                          title="Eliminar"
-                        >
-                          <MdDelete size={18}/>
-                        </button>
+                    <td className="col-acciones">
+                      <div className="flex justify-end gap-1.5">
+                        <IconButton variant="edit" icon={<MdEdit size={17} />} title="Editar" onClick={() => handleEdit(inv)} />
+                        <IconButton variant="delete" icon={<MdDelete size={17} />} title="Eliminar" onClick={() => inv.codInventariador && handleDelete(inv.codInventariador)} />
                       </div>
                     </td>
                   </tr>
@@ -270,8 +259,8 @@ export default function InventariadoresPage() {
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 text-right text-xs text-gray-500">
-          Total: {inventariadoresFiltrados.length} registros
+        <div className="tabla-pie">
+          <span>{inventariadoresFiltrados.length} registro{inventariadoresFiltrados.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
 

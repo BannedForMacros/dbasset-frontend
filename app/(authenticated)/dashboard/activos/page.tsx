@@ -129,7 +129,6 @@ function ActivoRow({ item, index, onView, onDelete, onHistorial }: {
   item: ActivoConCarga; index: number;
   onView: () => void; onDelete: () => void; onHistorial: () => void;
 }) {
-  const [hovered, setHovered] = useState(false);
   const router  = useRouter();
   const estado  = item.estado as Estado | undefined;
   const local   = item.local as Local | undefined;
@@ -139,20 +138,11 @@ function ActivoRow({ item, index, onView, onDelete, onHistorial }: {
   const esInv   = item.inventariado?.trim() === '1';
 
   return (
-    <tr
-      style={{
-        borderBottom: '1px solid #f8fafc',
-        backgroundColor: hovered
-          ? (esInv ? 'rgba(34,196,161,0.04)' : '#f8fbff')
-          : (esInv ? 'rgba(34,196,161,0.02)' : 'transparent'),
-        transition: 'background-color 0.1s',
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}>
+    <tr data-marcada={esInv}>
 
-      <td className="px-5 py-3.5 text-xs font-mono font-bold w-10" style={{ color: '#cbd5e1' }}>{index + 1}</td>
+      <td className="col-num text-xs font-mono font-bold w-10" style={{ color: '#cbd5e1' }}>{index + 1}</td>
 
-      <td className="px-5 py-3.5" style={{ minWidth: '200px' }}>
+      <td style={{ minWidth: '200px' }}>
         <div className="flex items-start gap-2">
           <div className="mt-0.5 flex-shrink-0">
             {esInv
@@ -161,8 +151,7 @@ function ActivoRow({ item, index, onView, onDelete, onHistorial }: {
           </div>
           <div>
             <p className="font-semibold text-sm leading-tight" style={{ color: '#0f172a' }}>{item.descripcion}</p>
-            <span className="text-xs font-mono px-1.5 py-0.5 rounded mt-1 inline-block"
-              style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}>{item.codActivo}</span>
+            <span className="codigo mt-1">{item.codActivo}</span>
             {item.epc && (
               <span className="text-xs font-mono px-1.5 py-0.5 rounded mt-1 ml-1 inline-block" title="EPC del tag RFID"
                 style={{ backgroundColor: 'rgba(34,196,161,0.08)', color: '#0f766e' }}>RFID</span>
@@ -174,7 +163,7 @@ function ActivoRow({ item, index, onView, onDelete, onHistorial }: {
         </div>
       </td>
 
-      <td className="px-5 py-3.5" style={{ minWidth: '140px' }}>
+      <td style={{ minWidth: '140px' }}>
         {resp ? (
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 text-white"
@@ -186,24 +175,24 @@ function ActivoRow({ item, index, onView, onDelete, onHistorial }: {
         ) : <span className="text-xs" style={{ color: '#e2e8f0' }}>Sin asignar</span>}
       </td>
 
-      <td className="px-5 py-3.5">
+      <td>
         <UbicacionTooltip local={local} area={area} oficina={oficina} />
       </td>
 
-      <td className="px-5 py-3.5">
+      <td>
         {estado?.nombreEstado
           ? <Badge label={estado.nombreEstado} type={getEstadoBadgeType(estado.nombreEstado)} />
           : <span className="text-xs" style={{ color: '#cbd5e1' }}>—</span>}
       </td>
 
-      <td className="px-5 py-3.5">
+      <td>
         {esInv
           ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: 'rgba(34,196,161,0.1)', color: '#0f9b76' }}><MdCheckCircle size={12} /> Sí</span>
           : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: '#f1f5f9', color: '#94a3b8' }}><MdPendingActions size={12} /> No</span>}
       </td>
 
-      <td className="px-5 py-3.5">
-        <div className="flex items-center gap-1">
+      <td className="col-acciones">
+        <div className="flex items-center justify-end gap-1">
           <IconButton variant="view"   icon={<MdVisibility size={17} />} title="Ver detalles"           onClick={onView} />
           {item.id && (
             <IconButton variant="edit" icon={<MdManageSearch size={17} />} title="Ficha completa (historial, fotos)"
@@ -601,23 +590,22 @@ export default function ActivosPage() {
       })()}
 
       {/* TABLA */}
-      <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0' }}>
+      <div className="tabla-marco">
 
         {loading && (
-          <table className="w-full">
+          <table className="tabla">
             <thead>
               <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
                 {HEADERS.map(h => (
-                  <th key={h} className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider"
-                    style={{ color: '#94a3b8', backgroundColor: '#fafafa' }}>{h}</th>
+                  <th key={h}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {Array.from({ length: 6 }).map((_, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #f8fafc' }}>
+                <tr key={i}>
                   {Array.from({ length: HEADERS.length }).map((__, j) => (
-                    <td key={j} className="px-5 py-4">
+                    <td key={j}>
                       <div className="h-3.5 rounded-md animate-pulse"
                         style={{ backgroundColor: '#f1f5f9', width: j === 1 ? '70%' : j === 0 ? '30%' : '55%' }} />
                     </td>
@@ -638,13 +626,12 @@ export default function ActivosPage() {
         )}
 
         {!loading && activosFiltrados.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="tabla-scroll">
+            <table className="tabla">
               <thead>
-                <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
+                <tr>
                   {HEADERS.map(h => (
-                    <th key={h} className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider"
-                      style={{ color: '#94a3b8', backgroundColor: '#fafafa' }}>{h}</th>
+                    <th key={h} className={h === 'Acciones' ? 'col-acciones' : h === '#' ? 'col-num' : undefined}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -661,9 +648,8 @@ export default function ActivosPage() {
                 ))}
               </tbody>
             </table>
-            <div className="px-5 py-3 flex items-center justify-between"
-              style={{ borderTop: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}>
-              <p className="text-xs" style={{ color: '#94a3b8' }}>
+            <div className="tabla-pie">
+              <p>
                 {activosFiltrados.length === activos.length
                   ? `${activos.length} registro${activos.length !== 1 ? 's' : ''}`
                   : `${activosFiltrados.length} de ${activos.length} registros`}

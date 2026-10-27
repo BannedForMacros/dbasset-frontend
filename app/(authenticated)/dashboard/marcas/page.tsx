@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { marcaService, Marca } from '../../../services/marca.service';
 import { MdAdd, MdEdit, MdDelete } from 'react-icons/md';
 import { DataTable } from '../../../components/common/DataTable';
+import IconButton from '../../../components/IconButton';
 import { useTableSearch } from '../../../hooks/useTableSearch';
 
 export default function MarcasPage() {
@@ -96,29 +97,16 @@ export default function MarcasPage() {
         data={filteredData}
         columns={[
           { header: 'Marca' },
-          { header: 'Acciones', className: 'text-right w-32' }
+          { header: 'Acciones', className: 'col-acciones' }
         ]}
         renderRow={(marca: Marca, index: number) => (
-          <tr key={marca.codMarca || index} className="hover:bg-gray-50 transition">
-            <td className="px-6 py-4">
-              <span className="font-semibold text-gray-900">{marca.nombreMarca}</span>
-            </td>
-            <td className="px-6 py-4 text-right">
-              <div className="flex justify-end gap-2">
-                <button 
-                  onClick={() => handleEdit(marca)} 
-                  className="p-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition"
-                  title="Editar"
-                >
-                  <MdEdit size={20} />
-                </button>
-                <button 
-                  onClick={() => marca.codMarca && handleDelete(marca.codMarca)} 
-                  className="p-2 border-2 border-red-600 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition"
-                  title="Eliminar"
-                >
-                  <MdDelete size={20} />
-                </button>
+          <tr key={marca.codMarca || index}>
+            <td className="font-semibold">{marca.nombreMarca}</td>
+            <td className="col-acciones">
+              <div className="flex justify-end gap-1.5">
+                <IconButton variant="edit" icon={<MdEdit size={17} />} title="Editar" onClick={() => handleEdit(marca)} />
+                <IconButton variant="delete" icon={<MdDelete size={17} />} title="Eliminar"
+                  onClick={() => marca.codMarca && handleDelete(marca.codMarca)} />
               </div>
             </td>
           </tr>

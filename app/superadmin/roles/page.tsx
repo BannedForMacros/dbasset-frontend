@@ -259,13 +259,13 @@ export default function RolesPermisosPage() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto rounded-xl" style={{ border: `1.5px solid ${COLORES.borde}` }}>
-                  <table className="w-full">
+                <div className="tabla-marco tabla-scroll">
+                  <table className="tabla tabla-compacta">
                     <thead>
-                      <tr style={{ backgroundColor: '#fafafa', borderBottom: `1.5px solid ${COLORES.borde}` }}>
-                        <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: COLORES.tenue }}>Módulo</th>
+                      <tr>
+                        <th>Módulo</th>
                         {ACCIONES.map(a => (
-                          <th key={a.valor} className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider" style={{ color: COLORES.tenue }}>
+                          <th key={a.valor} className="col-centro">
                             {a.label}
                           </th>
                         ))}
@@ -273,15 +273,15 @@ export default function RolesPermisosPage() {
                     </thead>
                     <tbody>
                       {grupos.map(({ modulo, lista }) => (
-                        <tr key={modulo} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td className="px-4 py-2.5 text-sm font-semibold" style={{ color: COLORES.texto }}>
+                        <tr key={modulo}>
+                          <td className="font-semibold">
                             {NOMBRES_MODULO[modulo] ?? modulo}
                           </td>
                           {ACCIONES.map(a => {
                             const permiso = lista.find(p => p.accion === a.valor);
-                            if (!permiso) return <td key={a.valor} className="px-4 py-2.5 text-center text-xs" style={{ color: '#cbd5e1' }}>—</td>;
+                            if (!permiso) return <td key={a.valor} className="col-centro text-xs" style={{ color: '#cbd5e1' }}>—</td>;
                             return (
-                              <td key={a.valor} className="px-4 py-2.5 text-center">
+                              <td key={a.valor} className="col-centro">
                                 <input type="checkbox" checked={marcados.has(permiso.codigo)}
                                   onChange={() => alternar(permiso.codigo)}
                                   title={`${permiso.codigo}${permiso.descripcion ? ' · ' + permiso.descripcion : ''}`}
