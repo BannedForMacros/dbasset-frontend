@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { createPortal } from 'react-dom';
 import { activoService, Activo } from '../../../services/activo.service';
 import { cargaService, Carga, DetalleCarga as DetalleCargaType } from '../../../services/carga.service';
 import { localService, Local } from '../../../services/local.service';
@@ -78,10 +79,16 @@ function exportarCSV(activos: ActivoConCarga[], nombre = 'activos') {
 // TOOLTIP UBICACIÓN
 // ══════════════════════════════════════════════════════════════════════════════
 function UbicacionTooltip({ local, area, oficina }: { local?: Local; area?: Area; oficina?: Oficina }) {
-  const [visible, setVisible] = useState(false);
+  // Posición del globo en pantalla: se dibuja en un portal para que la tabla no lo recorte
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const visible = pos !== null;
   if (!local?.nombreLocal) return <span style={{ color: '#e2e8f0' }}>—</span>;
+  const mostrar = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setPos({ left: r.left, top: r.top });
+  };
   return (
-    <div className="relative inline-flex" style={{ zIndex: visible ? 50 : 'auto' }}>
+    <div className="inline-flex">
       <button type="button"
         className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-150"
         style={{
@@ -89,14 +96,15 @@ function UbicacionTooltip({ local, area, oficina }: { local?: Local; area?: Area
           color: visible ? '#1e4786' : '#94a3b8',
           border: `1px solid ${visible ? 'rgba(30,71,134,0.2)' : 'transparent'}`,
         }}
-        onMouseEnter={() => setVisible(true)}
-        onMouseLeave={() => setVisible(false)}>
+        onMouseEnter={mostrar}
+        onMouseLeave={() => setPos(null)}>
         <MdLocationOn size={14} />
-        <span className="text-xs font-medium truncate max-w-[80px]">{local.nombreLocal}</span>
+        <span className="text-xs font-medium truncate max-w-[150px]">{local.nombreLocal}</span>
       </button>
-      {visible && (
-        <div className="absolute left-0 bottom-full mb-2 rounded-xl p-3 min-w-[180px]"
-          style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0', boxShadow: '0 8px 24px rgba(0,0,0,0.1)', pointerEvents: 'none' }}>
+      {visible && createPortal(
+        <div className="fixed z-[60] rounded-xl p-3 min-w-[180px] max-w-[280px]"
+          style={{ left: pos.left, top: pos.top - 8, transform: 'translateY(-100%)',
+            backgroundColor: '#fff', border: '1.5px solid #e2e8f0', boxShadow: '0 8px 24px rgba(0,0,0,0.1)', pointerEvents: 'none' }}>
           <div style={{ position: 'absolute', bottom: '-6px', left: '16px', width: '10px', height: '10px', backgroundColor: '#fff', border: '1.5px solid #e2e8f0', borderTop: 'none', borderLeft: 'none', transform: 'rotate(45deg)' }} />
           <div className="space-y-2">
             <div className="flex items-center gap-2">
@@ -116,7 +124,8 @@ function UbicacionTooltip({ local, area, oficina }: { local?: Local; area?: Area
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
