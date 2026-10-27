@@ -1,8 +1,10 @@
 'use client';
 
-import { MdLink, MdVisibility, MdVisibilityOff, MdPriorityHigh, MdLocationOn, MdWarning } from 'react-icons/md';
+import { ReactNode } from 'react';
+import { MdLink, MdLocationOn, MdWarning, MdCheckCircle, MdTableRows, MdPlace } from 'react-icons/md';
 import Select from '@/app/components/Select';
 import { CampoConfig } from '../../../../../services/configuracion.service';
+import { PasoEncabezado, AvisoPaso } from '../PasoEncabezado';
 
 interface Step3MapeoProps {
   campos: CampoConfig[];
@@ -12,6 +14,52 @@ interface Step3MapeoProps {
   onModoChange: (modo: 'excel' | 'unica') => void;
   onMapeoChange: (campo: string, columna: string) => void;
   onCampoToggle: (id: number, key: 'esVisible' | 'esObligatorio') => void;
+}
+
+function Interruptor({ activo, onClick, color, etiqueta }: { activo: boolean; onClick: () => void; color: string; etiqueta: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={activo}
+      aria-label={etiqueta}
+      title={etiqueta}
+      onClick={onClick}
+      className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+      style={{ backgroundColor: activo ? color : '#cbd5e1' }}
+    >
+      <span className="inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform"
+        style={{ transform: activo ? 'translateX(1.1rem)' : 'translateX(0.2rem)' }} />
+    </button>
+  );
+}
+
+function OpcionModo({ activo, onClick, icono, titulo, texto }: {
+  activo: boolean; onClick: () => void; icono: ReactNode; titulo: string; texto: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-left p-4 rounded-xl transition-all flex items-start gap-3"
+      style={{
+        backgroundColor: activo ? 'rgba(30,71,134,0.04)' : '#fff',
+        border: `1.5px solid ${activo ? '#1e4786' : '#e2e8f0'}`,
+        boxShadow: activo ? '0 0 0 3px rgba(30,71,134,0.1)' : 'none',
+      }}
+    >
+      <span className="w-5 h-5 mt-0.5 rounded-full shrink-0 flex items-center justify-center"
+        style={{ border: `2px solid ${activo ? '#1e4786' : '#cbd5e1'}` }}>
+        {activo && <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#1e4786' }} />}
+      </span>
+      <span>
+        <span className="font-semibold flex items-center gap-1.5" style={{ color: '#0f172a' }}>
+          <span style={{ color: '#1e4786' }}>{icono}</span>{titulo}
+        </span>
+        <span className="block text-sm mt-1" style={{ color: '#64748b' }}>{texto}</span>
+      </span>
+    </button>
+  );
 }
 
 export default function Step3Mapeo({
@@ -31,204 +79,148 @@ export default function Step3Mapeo({
   ];
 
   const tieneUbicacion = camposUbicacion.every(cu => mapeo[cu.key]);
+  const opcionesColumnas = excelHeaders.map((h) => ({ value: h, label: h }));
+  const mapeados = campos.filter(c => mapeo[c.nombreCampoBd]).length;
+  const obligatoriosFaltantes = campos.filter(c => c.esObligatorio && !mapeo[c.nombreCampoBd]).length;
 
   return (
-    <div className="space-y-6">
-      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-        <div className="flex items-start gap-3">
-          <MdLink className="text-blue-600 shrink-0 mt-0.5" size={24} />
+    <div className="space-y-5">
+      <PasoEncabezado
+        icono={<MdLink size={24} />}
+        titulo="Relacione las columnas del Excel"
+        descripcion={`Se detectaron ${excelHeaders.length} columnas. Las que coinciden por nombre ya vienen relacionadas.`}
+      />
+
+      {/* MODO DE UBICACIÓN (obligatorio) */}
+      <section className="rounded-2xl p-5 space-y-4" style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0' }}>
+        <div className="flex items-center gap-2">
+          <MdLocationOn size={18} style={{ color: '#1e4786' }} />
+          <h4 className="font-semibold" style={{ color: '#0f172a' }}>¿Cómo se asigna la ubicación?</h4>
+          <span className="text-xs font-semibold" style={{ color: '#ef4444' }}>Obligatorio</span>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          <OpcionModo
+            activo={modoUbicacion === 'unica'}
+            onClick={() => onModoChange('unica')}
+            icono={<MdPlace size={17} />}
+            titulo="Una sola ubicación para toda la carga"
+            texto="Todos los activos del Excel van al mismo local, área y oficina. Se elige en el siguiente paso."
+          />
+          <OpcionModo
+            activo={modoUbicacion === 'excel'}
+            onClick={() => onModoChange('excel')}
+            icono={<MdTableRows size={17} />}
+            titulo="La ubicación viene en el Excel"
+            texto="Cada activo trae su local, área y oficina en columnas del archivo."
+          />
+        </div>
+
+        {modoUbicacion === 'unica' && (
+          <AvisoPaso tono="ok" icono={<MdCheckCircle size={18} />}>
+            Elegirá <b>local, área y oficina</b> para toda la carga en el siguiente paso. No necesita columnas de ubicación.
+          </AvisoPaso>
+        )}
+
+        {modoUbicacion === 'excel' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {camposUbicacion.map((campo) => (
+                <Select
+                  key={campo.key}
+                  label={campo.label}
+                  required
+                  value={mapeo[campo.key] || ''}
+                  onChange={(v) => onMapeoChange(campo.key, v)}
+                  placeholder="Seleccionar columna"
+                  estado={!mapeo[campo.key] ? 'error' : 'ok'}
+                  options={opcionesColumnas}
+                />
+              ))}
+            </div>
+            {tieneUbicacion ? (
+              <AvisoPaso tono="ok" icono={<MdCheckCircle size={18} />}>
+                Ubicación completa: cada activo tomará su ubicación del Excel.
+              </AvisoPaso>
+            ) : (
+              <AvisoPaso tono="alerta" icono={<MdWarning size={18} />}>
+                Relacione las columnas de <b>Local</b>, <b>Área</b> y <b>Oficina</b>.
+              </AvisoPaso>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* CAMPOS DEL ACTIVO */}
+      <section className="tabla-marco">
+        <div className="tabla-barra">
           <div>
-            <h3 className="font-bold text-gray-800 mb-1">Mapeo de Columnas</h3>
-            <p className="text-sm text-gray-600">
-              Relacione las columnas del Excel con los campos del sistema
+            <h4 className="font-semibold" style={{ color: '#0f172a' }}>Campos del activo</h4>
+            <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>
+              {mapeados} de {campos.length} campos relacionados
             </p>
           </div>
-        </div>
-      </div>
-
-      {/* SELECCIÓN EXPLÍCITA DEL MODO DE UBICACIÓN */}
-      <div className="border-2 border-blue-300 rounded-lg overflow-hidden">
-        <div className="bg-blue-100 px-4 py-3 border-b border-blue-300 flex items-center gap-2">
-          <MdLocationOn className="text-blue-600" size={20} />
-          <h4 className="font-bold text-gray-800">¿Cómo se asigna la ubicación? (Obligatorio)</h4>
-        </div>
-
-        <div className="p-4 bg-blue-50 space-y-4">
-          {/* Dos opciones explícitas */}
-          <div className="grid sm:grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => onModoChange('unica')}
-              className={`text-left p-4 rounded-lg border-2 transition ${
-                modoUbicacion === 'unica'
-                  ? 'border-blue-600 bg-white ring-2 ring-blue-200'
-                  : 'border-gray-300 bg-white hover:border-blue-400'
-              }`}
-            >
-              <p className="font-bold text-gray-800 flex items-center gap-2">
-                <MdLocationOn size={18} className="text-blue-600" />
-                Una sola ubicación para toda la carga
-              </p>
-              <p className="text-sm text-gray-600 mt-1">
-                Todos los activos del Excel pertenecen al mismo Local / Área / Oficina.
-                Lo eliges en el siguiente paso.
-              </p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onModoChange('excel')}
-              className={`text-left p-4 rounded-lg border-2 transition ${
-                modoUbicacion === 'excel'
-                  ? 'border-blue-600 bg-white ring-2 ring-blue-200'
-                  : 'border-gray-300 bg-white hover:border-blue-400'
-              }`}
-            >
-              <p className="font-bold text-gray-800 flex items-center gap-2">
-                <MdLink size={18} className="text-blue-600" />
-                La ubicación viene en el Excel
-              </p>
-              <p className="text-sm text-gray-600 mt-1">
-                Cada activo trae su propia ubicación en columnas. Las mapeas aquí abajo.
-              </p>
-            </button>
-          </div>
-
-          {/* Aviso para ubicación única */}
-          {modoUbicacion === 'unica' && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-start gap-3">
-              <MdLocationOn className="text-green-600 shrink-0 mt-0.5" size={20} />
-              <p className="text-sm text-green-800">
-                Asignarás <strong>Local, Área y Oficina</strong> para toda la carga en el siguiente paso.
-                No necesitas columnas de ubicación en el Excel.
-              </p>
-            </div>
-          )}
-
-          {/* Selects de ubicación SOLO si la ubicación viene en el Excel */}
-          {modoUbicacion === 'excel' && (
-            <div className="space-y-3">
-              {camposUbicacion.map((campo) => (
-                <div key={campo.key} className="flex items-center gap-4 bg-white p-3 rounded-lg border border-blue-200">
-                  <div className="w-1/3">
-                    <p className="font-bold text-gray-800 flex items-center gap-2">
-                      {campo.label}
-                      <span className="text-red-500 text-xs flex items-center gap-1">
-                        <MdPriorityHigh size={14} /> Requerido
-                      </span>
-                    </p>
-                    <p className="text-xs text-gray-400 font-mono">DB: {campo.key}</p>
-                  </div>
-
-                  <div className="flex-1">
-                    <Select
-                      value={mapeo[campo.key] || ''}
-                      onChange={(v) => onMapeoChange(campo.key, v)}
-                      placeholder="-- Seleccionar columna --"
-                      estado={!mapeo[campo.key] ? 'error' : 'ok'}
-                      options={excelHeaders.map((h) => ({ value: h, label: h }))}
-                    />
-                  </div>
-                </div>
-              ))}
-
-              {tieneUbicacion ? (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <p className="text-sm text-green-800 font-medium">
-                    ✓ Ubicación completa. Los activos tomarán su ubicación del Excel.
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 flex items-start gap-3">
-                  <MdWarning className="text-amber-600 shrink-0 mt-0.5" size={20} />
-                  <p className="text-sm text-amber-800">
-                    Debe mapear <strong>Local</strong>, <strong>Área</strong> y <strong>Oficina</strong> desde las columnas del Excel.
-                  </p>
-                </div>
-              )}
-            </div>
+          {obligatoriosFaltantes > 0 ? (
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
+              style={{ backgroundColor: 'rgba(239,68,68,0.08)', color: '#dc2626' }}>
+              {obligatoriosFaltantes} obligatorio{obligatoriosFaltantes !== 1 ? 's' : ''} sin relacionar
+            </span>
+          ) : (
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
+              style={{ backgroundColor: 'rgba(34,196,161,0.12)', color: '#0f9b76' }}>
+              Obligatorios completos
+            </span>
           )}
         </div>
-      </div>
 
-      {/* SECCIÓN DE CAMPOS DINÁMICOS */}
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <div className="bg-gray-50 px-4 py-3 border-b">
-          <h4 className="font-bold text-gray-800">Campos del Activo</h4>
+        <div className="tabla-scroll">
+          <table className="tabla">
+            <thead>
+              <tr>
+                <th>Campo del sistema</th>
+                <th style={{ minWidth: '16rem' }}>Columna del Excel</th>
+                <th className="col-centro">Visible</th>
+                <th className="col-centro">Obligatorio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {campos.map((campo) => {
+                const columna = mapeo[campo.nombreCampoBd];
+                const falta = campo.esObligatorio && !columna;
+                return (
+                  <tr key={campo.id}>
+                    <td>
+                      <p className="font-semibold flex items-center gap-1.5">
+                        {campo.etiquetaUsuario}
+                        {campo.esObligatorio && <span style={{ color: '#ef4444' }}>*</span>}
+                      </p>
+                      <p className="text-xs font-mono" style={{ color: '#94a3b8' }}>{campo.nombreCampoBd}</p>
+                    </td>
+                    <td>
+                      <Select
+                        size="sm"
+                        value={columna || ''}
+                        onChange={(v) => onMapeoChange(campo.nombreCampoBd, v)}
+                        placeholder="Sin relacionar"
+                        estado={falta ? 'error' : columna ? 'ok' : undefined}
+                        options={opcionesColumnas}
+                      />
+                    </td>
+                    <td className="col-centro">
+                      <Interruptor activo={campo.esVisible} color="#1e4786" etiqueta="Visible"
+                        onClick={() => onCampoToggle(campo.id, 'esVisible')} />
+                    </td>
+                    <td className="col-centro">
+                      <Interruptor activo={campo.esObligatorio} color="#ef4444" etiqueta="Obligatorio"
+                        onClick={() => onCampoToggle(campo.id, 'esObligatorio')} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-
-        <div className="p-4 space-y-3">
-          {campos.map((campo) => (
-            <div
-              key={campo.id}
-              className="flex flex-col lg:flex-row items-start lg:items-center gap-4 p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-blue-300 transition"
-            >
-              <div className="w-full lg:w-1/3">
-                <p className="font-bold text-gray-800 flex items-center gap-2">
-                  {campo.etiquetaUsuario}
-                  {campo.esObligatorio && (
-                    <span className="text-red-500 text-xs flex items-center gap-1">
-                      <MdPriorityHigh size={14} /> Obligatorio
-                    </span>
-                  )}
-                </p>
-                <p className="text-xs text-gray-400 font-mono">DB: {campo.nombreCampoBd}</p>
-              </div>
-
-              <div className="w-full lg:w-1/3">
-                <Select
-                  value={mapeo[campo.nombreCampoBd] || ''}
-                  onChange={(v) => onMapeoChange(campo.nombreCampoBd, v)}
-                  placeholder="-- Sin mapear --"
-                  estado={campo.esObligatorio && !mapeo[campo.nombreCampoBd] ? 'error' : undefined}
-                  options={excelHeaders.map((h) => ({ value: h, label: h }))}
-                />
-              </div>
-
-              <div className="w-full lg:w-1/3 flex justify-end gap-6">
-                <button
-                  onClick={() => onCampoToggle(campo.id, 'esVisible')}
-                  className="flex flex-col items-center gap-1"
-                >
-                  <span className="text-[10px] font-bold text-gray-500 uppercase">Visible</span>
-                  <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    campo.esVisible ? 'bg-blue-600' : 'bg-gray-300'
-                  }`}>
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                      campo.esVisible ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
-                  </div>
-                  {campo.esVisible ? (
-                    <MdVisibility size={16} className="text-blue-600" />
-                  ) : (
-                    <MdVisibilityOff size={16} className="text-gray-400" />
-                  )}
-                </button>
-
-                <button
-                  onClick={() => onCampoToggle(campo.id, 'esObligatorio')}
-                  className="flex flex-col items-center gap-1"
-                >
-                  <span className="text-[10px] font-bold text-gray-500 uppercase">Obligatorio</span>
-                  <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    campo.esObligatorio ? 'bg-red-600' : 'bg-gray-300'
-                  }`}>
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                      campo.esObligatorio ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
-                  </div>
-                  {campo.esObligatorio ? (
-                    <MdPriorityHigh size={16} className="text-red-600" />
-                  ) : (
-                    <span className="w-4 h-4"></span>
-                  )}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      </section>
     </div>
   );
 }

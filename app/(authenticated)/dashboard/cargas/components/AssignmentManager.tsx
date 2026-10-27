@@ -2,27 +2,35 @@
 'use client';
 
 import { useState } from 'react';
-import { MdAdd, MdDelete, MdPerson, MdAutoFixHigh, MdTouchApp, MdInput, MdCheckCircle, MdWarning } from 'react-icons/md';
+import { MdAdd, MdClose, MdPerson, MdAutoFixHigh, MdTouchApp, MdLinearScale, MdCheck, MdWarning } from 'react-icons/md';
 import Select from '@/app/components/Select';
+import { Boton } from '@/app/components/rfid/ui';
+import { AvisoPaso } from './PasoEncabezado';
 
+/* Un mismo componente sirve para custodios e inventariadores; según el modo
+   la asignación lleva codResponsable/nombreResponsable o codInventariador/nombre. */
 interface Assignment {
   inicio: number;
   fin: number;
   codResponsable?: number;
   nombreResponsable?: string;
+  codInventariador?: number;
+  nombre?: string;
 }
 
-interface Person { 
-  id: number; 
-  name: string; 
-  subtitle?: string; 
+interface Person {
+  id: number;
+  name: string;
+  subtitle?: string;
 }
 
 interface AssignmentManagerProps {
   totalItems: number;
   persons: Person[];
-  assignments: Assignment[];
-  onAssignmentsChange: (assignments: Assignment[]) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  assignments: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onAssignmentsChange: (assignments: any[]) => void;
   selectedRows: Set<number>;
   title: string;
   mode: 'responsable' | 'inventariador';
@@ -33,27 +41,33 @@ export default function AssignmentManager({
   persons,
   assignments,
   onAssignmentsChange,
-  selectedRows
+  selectedRows,
+  title,
+  mode
 }: AssignmentManagerProps) {
   const [strategy, setStrategy] = useState<'selected' | 'manual' | 'equal'>(
-    selectedRows.size > 0 ? 'selected' : 'manual'
+    selectedRows.size > 0 && selectedRows.size < totalItems ? 'selected' : 'manual'
   );
-  
+
   const [range, setRange] = useState({ start: 1, end: totalItems });
   const [selectedPerson, setSelectedPerson] = useState('');
   const [personsForEqual, setPersonsForEqual] = useState<Set<number>>(new Set());
 
-  const formatRange = (i: number, f: number) => i === f ? `Fila ${i}` : `Filas ${i} al ${f}`;
+  const personas = mode === 'responsable' ? 'custodios' : 'inventariadores';
+  const formatRange = (i: number, f: number) => i === f ? `Fila ${i}` : `Filas ${i} a ${f}`;
+  const nombreDe = (a: Assignment) => a.nombreResponsable ?? a.nombre ?? '';
+
+  const crear = (inicio: number, fin: number, person: Person): Assignment =>
+    mode === 'responsable'
+      ? { inicio, fin, codResponsable: person.id, nombreResponsable: person.name }
+      : { inicio, fin, codInventariador: person.id, nombre: person.name };
+
+  const rangoValido = range.start >= 1 && range.end <= totalItems && range.start <= range.end;
 
   const handleManualAdd = () => {
-    if (!selectedPerson) return;
+    if (!selectedPerson || !rangoValido) return;
     const person = persons.find(p => p.id === Number(selectedPerson))!;
-    onAssignmentsChange([...assignments, {
-      inicio: range.start,
-      fin: range.end,
-      codResponsable: person.id,
-      nombreResponsable: person.name
-    }]);
+    onAssignmentsChange([...assignments, crear(range.start, range.end, person)]);
     setSelectedPerson('');
   };
 
@@ -61,28 +75,28 @@ export default function AssignmentManager({
     if (selectedRows.size === 0) return;
     const person = persons.find(p => p.id === personId)!;
     const sorted = Array.from(selectedRows).sort((a, b) => a - b).map(i => i + 1);
-    
+
     const newRanges: Assignment[] = [];
     let s = sorted[0], e = sorted[0];
 
     for (let i = 1; i < sorted.length; i++) {
       if (sorted[i] === e + 1) e = sorted[i];
       else {
-        newRanges.push({ inicio: s, fin: e, codResponsable: personId, nombreResponsable: person.name });
+        newRanges.push(crear(s, e, person));
         s = sorted[i]; e = sorted[i];
       }
     }
-    newRanges.push({ inicio: s, fin: e, codResponsable: personId, nombreResponsable: person.name });
+    newRanges.push(crear(s, e, person));
     onAssignmentsChange([...assignments, ...newRanges]);
   };
 
   const handleEqualDistribution = () => {
     if (personsForEqual.size === 0) return;
-    
+
     const assignedIds = new Set<number>();
-    assignments.forEach(a => { for (let i = a.inicio; i <= a.fin; i++) assignedIds.add(i); });
+    assignments.forEach((a: Assignment) => { for (let i = a.inicio; i <= a.fin; i++) assignedIds.add(i); });
     const unassigned = Array.from({ length: totalItems }, (_, i) => i + 1).filter(idx => !assignedIds.has(idx));
-    
+
     if (unassigned.length === 0) {
       alert("¡Ya no hay filas pendientes por asignar!");
       return;
@@ -99,131 +113,114 @@ export default function AssignmentManager({
       const person = persons.find(p => p.id === personId)!;
       const count = perPerson + (idx < remainder ? 1 : 0);
       const indices = unassigned.slice(currentIdx, currentIdx + count);
-      
+
       if (indices.length > 0) {
         let s = indices[0], last = indices[0];
-        const push = (start: number, end: number) => {
-          newAsigs.push({ inicio: start, fin: end, codResponsable: personId, nombreResponsable: person.name });
-        };
         for (let i = 1; i < indices.length; i++) {
           if (indices[i] === last + 1) last = indices[i];
-          else { push(s, last); s = indices[i]; last = indices[i]; }
+          else { newAsigs.push(crear(s, last, person)); s = indices[i]; last = indices[i]; }
         }
-        push(s, last);
+        newAsigs.push(crear(s, last, person));
       }
       currentIdx += count;
     });
 
     onAssignmentsChange([...assignments, ...newAsigs]);
-    setPersonsForEqual(new Set()); 
+    setPersonsForEqual(new Set());
   };
 
+  const sinPersonas = persons.length === 0 && (
+    <p className="text-sm italic" style={{ color: '#94a3b8' }}>No hay {personas} registrados.</p>
+  );
+
   return (
-    <div className="bg-gray-100 rounded-xl p-4 border-2 border-gray-300 shadow-md flex flex-col gap-4">
-      
-      {/* 1. BOTONES DE ESTRATEGIA (¡Ahora sí parecen botones siempre!) */}
-      <div className="flex flex-col sm:flex-row gap-3 bg-gray-200 p-2 rounded-xl border border-gray-300">
-        <button
-          onClick={() => setStrategy('selected')}
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-all text-sm border-2 ${
-            strategy === 'selected' 
-              ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-[1.02]' 
-              : 'bg-white text-gray-700 border-gray-300 shadow-sm hover:border-gray-400 hover:bg-gray-50'
-          }`}
-        >
-          <MdTouchApp size={20} /> Asignar lo Seleccionado ({selectedRows.size})
-        </button>
-
-        <button
-          onClick={() => setStrategy('manual')}
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-all text-sm border-2 ${
-            strategy === 'manual' 
-              ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-[1.02]' 
-              : 'bg-white text-gray-700 border-gray-300 shadow-sm hover:border-gray-400 hover:bg-gray-50'
-          }`}
-        >
-          <MdInput size={20} /> Asignar por Rango (1 al 10)
-        </button>
-
-        <button
-          onClick={() => setStrategy('equal')}
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-all text-sm border-2 ${
-            strategy === 'equal' 
-              ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-[1.02]' 
-              : 'bg-white text-gray-700 border-gray-300 shadow-sm hover:border-gray-400 hover:bg-gray-50'
-          }`}
-        >
-          <MdAutoFixHigh size={20} /> Repartir por igual
-        </button>
+    <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0' }}>
+      <div className="tabla-barra">
+        <h4 className="font-semibold" style={{ color: '#0f172a' }}>{title}</h4>
+        <div className="segmentado">
+          <button type="button" data-activo={strategy === 'selected'} onClick={() => setStrategy('selected')}>
+            <MdTouchApp size={15} /> Filas seleccionadas ({selectedRows.size})
+          </button>
+          <button type="button" data-activo={strategy === 'manual'} onClick={() => setStrategy('manual')}>
+            <MdLinearScale size={15} /> Por rango
+          </button>
+          <button type="button" data-activo={strategy === 'equal'} onClick={() => setStrategy('equal')}>
+            <MdAutoFixHigh size={15} /> Repartir por igual
+          </button>
+        </div>
       </div>
 
-      {/* 2. ÁREA DE EJECUCIÓN */}
-      <div className="bg-white rounded-lg p-5 border border-gray-300 min-h-[100px] flex items-center">
-        
+      <div className="p-5">
         {strategy === 'selected' && (
-          <div className="w-full">
-            {selectedRows.size === 0 ? (
-              <div className="text-center p-4 bg-yellow-50 border-2 border-yellow-200 rounded-lg shadow-sm">
-                <p className="text-yellow-800 font-bold flex items-center justify-center gap-2 text-sm sm:text-base">
-                  <MdWarning size={24} /> Primero debes marcar una o más casillas en la tabla de arriba.
-                </p>
+          selectedRows.size === 0 ? (
+            <AvisoPaso tono="alerta" icono={<MdWarning size={18} />}>
+              Marque una o más filas en la tabla de arriba y luego elija a quién asignarlas.
+            </AvisoPaso>
+          ) : (
+            <div>
+              <p className="text-sm mb-3" style={{ color: '#64748b' }}>
+                Asignar las <b style={{ color: '#0f172a' }}>{selectedRows.size} filas seleccionadas</b> a:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {persons.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => handleQuickAssign(p.id)}
+                    className="flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full text-sm font-semibold transition-colors"
+                    style={{ border: '1.5px solid #e2e8f0', color: '#1e4786', backgroundColor: '#fff' }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#1e4786'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#1e4786'; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.color = '#1e4786'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+                  >
+                    <span className="w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(30,71,134,0.08)' }}>
+                      <MdPerson size={15} />
+                    </span>
+                    {p.name}
+                  </button>
+                ))}
+                {sinPersonas}
               </div>
-            ) : (
-              <div>
-                <p className="text-sm font-bold text-gray-700 mb-3">¿A quién le asignamos estas {selectedRows.size} filas?</p>
-                <div className="flex flex-wrap gap-3">
-                  {persons.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => handleQuickAssign(p.id)}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-50 border-2 border-blue-300 rounded-lg text-blue-800 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm font-bold"
-                    >
-                      <MdPerson size={20} /> {p.name}
-                    </button>
-                  ))}
-                  {persons.length === 0 && <p className="text-gray-500 italic">No hay responsables agregados.</p>}
-                </div>
-              </div>
+            </div>
+          )
+        )}
+
+        {strategy === 'manual' && (
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex-1 min-w-[220px]">
+              <Select
+                label={mode === 'responsable' ? 'Custodio' : 'Inventariador'}
+                value={selectedPerson}
+                onChange={v => setSelectedPerson(v)}
+                placeholder="Seleccionar persona"
+                options={persons.map(p => ({ value: p.id, label: p.name }))}
+              />
+            </div>
+            <label className="flex flex-col gap-1.5 w-28">
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Desde fila</span>
+              <input type="number" min={1} max={totalItems} value={range.start}
+                onChange={e => setRange({ ...range, start: +e.target.value })}
+                className="input-suave text-center font-semibold" />
+            </label>
+            <label className="flex flex-col gap-1.5 w-28">
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Hasta fila</span>
+              <input type="number" min={1} max={totalItems} value={range.end}
+                onChange={e => setRange({ ...range, end: +e.target.value })}
+                className="input-suave text-center font-semibold" />
+            </label>
+            <Boton onClick={handleManualAdd} disabled={!selectedPerson || !rangoValido}>
+              <MdAdd size={18} /> Asignar
+            </Boton>
+            {!rangoValido && (
+              <p className="w-full text-xs" style={{ color: '#dc2626' }}>El rango debe estar entre 1 y {totalItems}.</p>
             )}
           </div>
         )}
 
-        {strategy === 'manual' && (
-          <div className="w-full">
-            <p className="text-sm font-bold text-gray-700 mb-3">Escribe desde qué número hasta qué número quieres asignar:</p>
-            <div className="flex flex-wrap gap-4 items-end">
-              <div className="flex-1 min-w-[200px]">
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">1. Elige a la persona</label>
-                <Select 
-                  value={selectedPerson} 
-                  onChange={v => setSelectedPerson(v)}
-                  placeholder="Selecciona aquí..."
-                  options={persons.map(p => ({ value: p.id, label: p.name }))}
-                />
-              </div>
-              <div className="w-24">
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block text-center">Desde fila</label>
-                <input type="number" value={range.start} onChange={e => setRange({...range, start: +e.target.value})} className="w-full p-3 border-2 border-gray-300 rounded-lg text-center font-bold text-gray-700 focus:border-blue-600 outline-none" />
-              </div>
-              <div className="w-24">
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block text-center">Hasta fila</label>
-                <input type="number" value={range.end} onChange={e => setRange({...range, end: +e.target.value})} className="w-full p-3 border-2 border-gray-300 rounded-lg text-center font-bold text-gray-700 focus:border-blue-600 outline-none" />
-              </div>
-              <button 
-                onClick={handleManualAdd}
-                disabled={!selectedPerson}
-                className="p-3 bg-blue-600 text-white rounded-lg border-2 border-blue-700 hover:bg-blue-700 disabled:bg-gray-300 disabled:border-gray-400 disabled:text-gray-500 transition-all font-bold flex items-center gap-2"
-              >
-                <MdAdd size={24} /> Asignar
-              </button>
-            </div>
-          </div>
-        )}
-
         {strategy === 'equal' && (
-          <div className="w-full">
-            <p className="text-sm font-bold text-gray-700 mb-3">Selecciona a 2 o más personas para repartir los ítems que faltan:</p>
-            <div className="flex flex-wrap gap-3 mb-4">
+          <div className="space-y-4">
+            <p className="text-sm" style={{ color: '#64748b' }}>
+              Elija dos o más personas; las filas que faltan se reparten en partes iguales.
+            </p>
+            <div className="flex flex-wrap gap-2">
               {persons.map(p => {
                 const isSelected = personsForEqual.has(p.id);
                 return (
@@ -234,61 +231,64 @@ export default function AssignmentManager({
                       isSelected ? newSet.delete(p.id) : newSet.add(p.id);
                       setPersonsForEqual(newSet);
                     }}
-                    className={`flex items-center gap-2 px-4 py-2 border-2 rounded-lg font-bold transition-all shadow-sm ${
-                      isSelected 
-                        ? 'bg-blue-100 border-blue-600 text-blue-800' 
-                        : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
-                    }`}
+                    className="flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full text-sm font-semibold transition-colors"
+                    style={{
+                      border: `1.5px solid ${isSelected ? '#1e4786' : '#e2e8f0'}`,
+                      backgroundColor: isSelected ? 'rgba(30,71,134,0.06)' : '#fff',
+                      color: isSelected ? '#1e4786' : '#475569',
+                    }}
                   >
-                    <div className={`w-5 h-5 rounded flex items-center justify-center border ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-400'}`}>
-                      {isSelected && <MdCheckCircle size={16} />}
-                    </div>
+                    <span className="w-6 h-6 rounded-full flex items-center justify-center"
+                      style={{ backgroundColor: isSelected ? '#1e4786' : '#f1f5f9', color: isSelected ? '#fff' : '#94a3b8' }}>
+                      {isSelected ? <MdCheck size={15} /> : <MdPerson size={15} />}
+                    </span>
                     {p.name}
                   </button>
-                )
+                );
               })}
+              {sinPersonas}
             </div>
-            
-            <button 
-              onClick={handleEqualDistribution}
-              disabled={personsForEqual.size < 2}
-              className="w-full p-3 bg-green-600 text-white rounded-lg border-2 border-green-700 hover:bg-green-700 disabled:bg-gray-300 disabled:border-gray-400 disabled:text-gray-500 transition-all font-bold text-lg flex justify-center items-center gap-2 shadow-md"
-            >
-              <MdAutoFixHigh size={24} /> 
-              {personsForEqual.size < 2 
-                ? 'Selecciona al menos 2 personas arriba' 
-                : `Repartir entre estas ${personsForEqual.size} personas`}
-            </button>
+            <Boton onClick={handleEqualDistribution} disabled={personsForEqual.size < 2}>
+              <MdAutoFixHigh size={17} />
+              {personsForEqual.size < 2
+                ? 'Seleccione al menos 2 personas'
+                : `Repartir entre ${personsForEqual.size} personas`}
+            </Boton>
           </div>
         )}
       </div>
 
-      {/* 3. HISTORIAL DE ASIGNACIONES */}
+      {/* Asignaciones realizadas */}
       {assignments.length > 0 && (
-        <div className="bg-white rounded-lg p-4 border border-gray-300 shadow-sm">
+        <div className="px-5 py-4" style={{ borderTop: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}>
           <div className="flex justify-between items-center mb-3">
-            <p className="text-sm font-black text-gray-800 uppercase">Lo que has asignado hasta ahora:</p>
-            <button 
-              onClick={() => onAssignmentsChange([])} 
-              className="text-xs text-red-600 hover:underline font-bold"
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>
+              Asignaciones ({assignments.length})
+            </p>
+            <button
+              onClick={() => onAssignmentsChange([])}
+              className="text-xs font-semibold hover:underline"
+              style={{ color: '#dc2626' }}
             >
-              Borrar Todo
+              Quitar todas
             </button>
           </div>
-          
-          <div className="flex flex-wrap gap-2 max-h-[120px] overflow-y-auto">
-            {assignments.map((a, idx) => (
-              <div key={idx} className="flex items-center justify-between gap-3 px-3 py-2 bg-gray-50 border-2 border-gray-200 rounded-lg min-w-[200px]">
-                <div>
-                  <p className="text-xs font-black text-blue-700">{formatRange(a.inicio, a.fin)}</p>
-                  <p className="text-sm font-bold text-gray-800 truncate max-w-[150px]">{a.nombreResponsable}</p>
+
+          <div className="flex flex-wrap gap-2 max-h-[132px] overflow-y-auto">
+            {assignments.map((a: Assignment, idx: number) => (
+              <div key={idx} className="flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-xl"
+                style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0' }}>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold" style={{ color: '#1e4786' }}>{formatRange(a.inicio, a.fin)}</p>
+                  <p className="text-sm font-medium truncate max-w-[170px]" style={{ color: '#0f172a' }}>{nombreDe(a)}</p>
                 </div>
-                <button 
-                  onClick={() => onAssignmentsChange(assignments.filter((_, i) => i !== idx))}
-                  className="p-1.5 bg-white border border-red-200 text-red-500 hover:bg-red-500 hover:text-white rounded transition-colors"
-                  title="Eliminar asignación"
+                <button
+                  onClick={() => onAssignmentsChange(assignments.filter((_: Assignment, i: number) => i !== idx))}
+                  className="p-1 rounded-lg transition-colors hover:bg-red-50"
+                  style={{ color: '#ef4444' }}
+                  title="Quitar asignación"
                 >
-                  <MdDelete size={18} />
+                  <MdClose size={16} />
                 </button>
               </div>
             ))}

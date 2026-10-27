@@ -4,7 +4,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import * as XLSX from 'xlsx';
-import { MdAdd, MdArrowForward, MdClose, MdCheck, MdInbox, MdVisibility } from 'react-icons/md';
+import {
+  MdAdd, MdArrowForward, MdArrowBack, MdClose, MdCheck, MdInbox, MdVisibility,
+  MdLocalShipping, MdInventory2, MdPendingActions, MdTaskAlt, MdUploadFile,
+} from 'react-icons/md';
 
 import { cargaService, Carga, UbicacionUnica } from '../../../services/carga.service';
 import { responsableService, Responsable } from '../../../services/responsable.service';
@@ -14,6 +17,9 @@ import { localService, Local } from '../../../services/local.service';
 import { areaService, Area } from '../../../services/area.service';
 import { oficinaService, Oficina } from '../../../services/oficina.service';
 import { authService } from '../../../services/auth.service';
+
+import IconButton from '@/app/components/IconButton';
+import { PageHeader, Boton, Pastilla, Indicador, Buscador, TablaVacia, COLORES } from '@/app/components/rfid/ui';
 
 import Toast from './components/Toast';
 import CargaDetalleModal from './components/CargaDetalleModal';
@@ -50,6 +56,8 @@ interface Person {
 export default function CargasPage() {
   const [cargas, setCargas] = useState<Carga[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('');
 
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
@@ -414,27 +422,41 @@ const handleConfirmarTodo = async () => {
     setShowDetalleModal(true);
   };
 
-  const renderEstado = (estado: string) => {
-    const estadoMap: Record<string, { label: string; color: string }> = {
-      C: { label: 'Creada', color: 'bg-gray-100 text-gray-700 border-gray-200' },
-      A: { label: 'Asignada', color: 'bg-blue-100 text-blue-800 border-blue-200' },
-      T: { label: 'Terminada', color: 'bg-green-100 text-green-800 border-green-200' }
-    };
-
-    const info = estadoMap[estado?.trim()] || estadoMap.C;
-
-    return (
-      <span className={`inline-flex items-center gap-1 ${info.color} px-3 py-1 rounded-full text-xs font-bold border`}>
-        <span className="w-2 h-2 bg-current rounded-full"></span>
-        {info.label}
-      </span>
-    );
+  const continuarCarga = async (carga: Carga) => {
+    try {
+      await cargarDatosWizard();
+      setSelectedCarga(carga);
+      setWizardStep(carga.estado?.trim() === 'C' ? 2 : 5);
+      setShowWizard(true);
+    } catch (error) {
+      showToast('error', 'Error al cargar los datos de la carga');
+    }
   };
+
+  const ESTADOS: Record<string, { label: string; tono: 'neutro' | 'marca' | 'ok' }> = {
+    C: { label: 'Creada', tono: 'neutro' },
+    A: { label: 'En proceso', tono: 'marca' },
+    T: { label: 'Terminada', tono: 'ok' },
+  };
+
+  const renderEstado = (estado: string) => {
+    const info = ESTADOS[estado?.trim()] || ESTADOS.C;
+    return <Pastilla texto={info.label} tono={info.tono} />;
+  };
+
+  const cuenta = (e: string) => cargas.filter(c => (c.estado?.trim() || 'C') === e).length;
+
+  const cargasVisibles = cargas.filter(c => {
+    if (filtroEstado && (c.estado?.trim() || 'C') !== filtroEstado) return false;
+    if (!busqueda.trim()) return true;
+    const t = busqueda.toLowerCase();
+    return c.descripcion?.toLowerCase().includes(t) || String(c.codCarga).includes(t) || c.fecha?.includes(t);
+  });
 
   const getWizardSteps = () => {
     const steps = [
       { num: 1, label: 'Descripción' },
-      { num: 2, label: 'Cargar Excel' },
+      { num: 2, label: 'Archivo' },
       { num: 3, label: 'Mapeo' }
     ];
 
@@ -443,7 +465,7 @@ const handleConfirmarTodo = async () => {
     }
 
     steps.push(
-      { num: needsUbicacion ? 5 : 4, label: 'Responsables' },
+      { num: needsUbicacion ? 5 : 4, label: 'Custodios' },
       { num: needsUbicacion ? 6 : 5, label: 'Inventariadores' },
       { num: needsUbicacion ? 7 : 6, label: 'Confirmar' }
     );
@@ -457,6 +479,14 @@ const handleConfirmarTodo = async () => {
     return wizardStep;
   };
 
+  const pasos = getWizardSteps();
+  const pasoActual = getAdjustedStep();
+  const pasoActualInfo = pasos.find(p => p.num === pasoActual);
+  const posicionPaso = Math.max(1, pasos.findIndex(p => p.num === pasoActual) + 1);
+  const esPasoResponsables = (wizardStep === 4 && !needsUbicacion) || (wizardStep === 5 && needsUbicacion);
+  const esPasoInventariadores = (wizardStep === 5 && !needsUbicacion) || (wizardStep === 6 && needsUbicacion);
+  const esPasoConfirmar = (wizardStep === 6 && !needsUbicacion) || (wizardStep === 7 && needsUbicacion);
+
   return (
     <div className="space-y-6">
       {toast && (
@@ -468,117 +498,90 @@ const handleConfirmarTodo = async () => {
         />
       )}
 
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">Gestión de Cargas</h1>
-          <p className="text-gray-600 mt-1">Administración de cargas de inventario</p>
-        </div>
-        <button
-          onClick={iniciarWizard}
-          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition shadow-lg font-bold"
-        >
-          <MdAdd size={22} /> Nueva Carga
-        </button>
+      <PageHeader
+        titulo="Cargas de inventario"
+        subtitulo="Importa activos desde Excel y asigna custodios e inventariadores"
+        icono={<MdLocalShipping size={15} />}
+        acciones={<Boton onClick={iniciarWizard}><MdAdd size={19} /> Nueva carga</Boton>}
+      />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Indicador etiqueta="Cargas" valor={loading ? '—' : cargas.length} icono={<MdInventory2 size={22} />} tono="marca" />
+        <Indicador etiqueta="En proceso" valor={loading ? '—' : cuenta('A')} icono={<MdPendingActions size={22} />} tono="alerta" />
+        <Indicador etiqueta="Terminadas" valor={loading ? '—' : cuenta('T')} icono={<MdTaskAlt size={22} />} tono="acento" />
+        <Indicador etiqueta="Sin archivo" valor={loading ? '—' : cuenta('C')} icono={<MdUploadFile size={22} />} tono="neutro" />
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
+      <div className="tabla-marco">
+        <div className="tabla-barra">
+          <Buscador valor={busqueda} onCambio={setBusqueda} placeholder="Buscar por descripción, código o fecha…" />
+          <div className="segmentado">
+            {[['', 'Todas'], ['A', 'En proceso'], ['T', 'Terminadas'], ['C', 'Creadas']].map(([v, l]) => (
+              <button key={v} type="button" data-activo={filtroEstado === v} onClick={() => setFiltroEstado(v)}>{l}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className="tabla-scroll">
+          <table className="tabla">
+            <thead>
               <tr>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase text-left">Código</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase text-left">Descripción</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase text-left">Fecha</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase text-left">Estado</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase text-right">Acciones</th>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Fecha</th>
+                <th>Estado</th>
+                <th className="col-acciones">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-20 text-center">
-                    <div className="flex flex-col items-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                      <span className="text-gray-500">Cargando...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : cargas.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
-                    <div className="flex flex-col items-center text-gray-500">
-                      <MdInbox size={48} className="mb-3 text-gray-300"/> 
-                      <p className="font-medium">No hay cargas registradas</p>
-                      <p className="text-sm text-gray-400 mt-1">Crea una nueva carga</p>
-                    </div>
-                  </td>
-                </tr>
+                <TablaVacia columnas={5} texto="Cargando cargas…" />
+              ) : cargasVisibles.length === 0 ? (
+                <TablaVacia
+                  columnas={5}
+                  icono={<MdInbox size={40} />}
+                  texto={cargas.length === 0 ? 'No hay cargas registradas' : 'No hay cargas con ese filtro'}
+                  detalle={cargas.length === 0 ? 'Crea una nueva carga para importar activos desde Excel' : undefined}
+                />
               ) : (
-                cargas.map((carga) => (
-                  <tr key={carga.codCarga} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4">
-                      <span className="font-mono text-sm font-bold text-blue-600">
-                        #{carga.codCarga}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-semibold text-gray-900">{carga.descripcion}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-gray-600">{carga.fecha}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {renderEstado(carga.estado || 'C')}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        {(carga.estado?.trim() === 'A' || carga.estado?.trim() === 'T') && (
-                          <button
-                            onClick={() => handleVerDetalles(carga)}
-                            className="p-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition"
-                            title="Ver detalles"
-                          >
-                            <MdVisibility size={20} />
-                          </button>
-                        )}
-                        
-                        {carga.estado?.trim() !== 'T' && (
-                          <button
-                            onClick={async () => {
-                              try {
-                                await cargarDatosWizard();
-                                setSelectedCarga(carga);
-                                setWizardStep(carga.estado?.trim() === 'C' ? 2 : 5);
-                                setShowWizard(true);
-                              } catch (error) {
-                                showToast('error', 'Error al cargar los datos de la carga');
-                              }
-                            }}
-                            className="p-2 border-2 border-green-600 text-green-600 rounded-lg hover:bg-green-600 hover:text-white transition"
-                            title="Continuar proceso"
-                          >
-                            <MdArrowForward size={20} />
-                          </button>
-                        )}
-
-                        {carga.estado?.trim() === 'T' && (
-                          <span className="text-sm text-gray-500 italic px-3">
-                            Completada
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                cargasVisibles.map((carga) => {
+                  const estado = carga.estado?.trim();
+                  return (
+                    <tr key={carga.codCarga}>
+                      <td><span className="codigo">#{carga.codCarga}</span></td>
+                      <td className="font-semibold">{carga.descripcion}</td>
+                      <td className="col-tenue whitespace-nowrap">{carga.fecha}</td>
+                      <td>{renderEstado(carga.estado || 'C')}</td>
+                      <td className="col-acciones">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {(estado === 'A' || estado === 'T') && (
+                            <IconButton variant="view" icon={<MdVisibility size={17} />} title="Ver detalle"
+                              onClick={() => handleVerDetalles(carga)} />
+                          )}
+                          {estado !== 'T' ? (
+                            <Boton pequeno variante="exito" title="Continuar proceso" onClick={() => continuarCarga(carga)}>
+                              Continuar <MdArrowForward size={14} />
+                            </Boton>
+                          ) : (
+                            <span className="text-xs px-2" style={{ color: COLORES.tenue }}>Completada</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
-        
+
         {!loading && cargas.length > 0 && (
-          <div className="px-6 py-3 bg-gray-50 border-t text-xs text-gray-500 text-right">
-            Total: {cargas.length}
+          <div className="tabla-pie">
+            <span>
+              {cargasVisibles.length === cargas.length
+                ? `${cargas.length} carga${cargas.length !== 1 ? 's' : ''}`
+                : `${cargasVisibles.length} de ${cargas.length} cargas`}
+            </span>
           </div>
         )}
       </div>
@@ -597,42 +600,62 @@ const handleConfirmarTodo = async () => {
 
       {/* Modal Wizard */}
       {showWizard && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl flex flex-col max-h-[95vh]">
-            
-            <div className="bg-blue-600 px-6 py-5 rounded-t-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-overlay-in"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+          <div className="w-full max-w-6xl rounded-2xl overflow-hidden flex flex-col max-h-[95vh] animate-fade-up"
+            style={{ backgroundColor: '#fff', boxShadow: '0 25px 60px rgba(0,0,0,0.15)' }}>
+
+            <div className="px-6 pt-4 pb-5 shrink-0" style={{ background: 'linear-gradient(135deg, #003366 0%, #1e4786 100%)' }}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-white">Proceso de Carga</h2>
+                <div>
+                  <h2 className="text-lg font-bold text-white">
+                    {selectedCarga?.descripcion || 'Nueva carga'}
+                  </h2>
+                  <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    Paso {posicionPaso} de {pasos.length} · {pasoActualInfo?.label}
+                  </p>
+                </div>
                 <button
                   onClick={() => setShowWizard(false)}
-                  className="text-white/80 hover:text-white"
+                  className="p-2 rounded-lg transition-colors hover:bg-white/10"
+                  style={{ color: 'rgba(255,255,255,0.7)' }}
+                  aria-label="Cerrar"
                 >
-                  <MdClose size={24} />
+                  <MdClose size={22} />
                 </button>
               </div>
-              
-              <div className="flex items-center justify-between">
-                {getWizardSteps().map((step, idx) => (
-                  <div key={step.num} className="flex items-center flex-1">
-                    <div className="flex flex-col items-center flex-1">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                        getAdjustedStep() >= step.num ? 'bg-white text-blue-600' : 'bg-blue-400 text-white'
-                      }`}>
-                        {getAdjustedStep() > step.num ? <MdCheck size={24} /> : step.num}
+
+              {/* Indicador de pasos */}
+              <div className="flex items-center">
+                {pasos.map((step, idx) => {
+                  const hecho = pasoActual > step.num;
+                  const actual = pasoActual === step.num;
+                  return (
+                    <div key={step.num} className="flex items-center flex-1 last:flex-none">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors"
+                          style={{
+                            backgroundColor: hecho ? '#22c4a1' : actual ? '#fff' : 'rgba(255,255,255,0.12)',
+                            color: hecho ? '#fff' : actual ? '#1e4786' : 'rgba(255,255,255,0.6)',
+                          }}>
+                          {hecho ? <MdCheck size={16} /> : idx + 1}
+                        </div>
+                        <span className="text-xs font-semibold whitespace-nowrap hidden md:inline"
+                          style={{ color: actual ? '#fff' : 'rgba(255,255,255,0.6)' }}>
+                          {step.label}
+                        </span>
                       </div>
-                      <span className="text-xs text-white mt-1 font-medium">{step.label}</span>
+                      {idx < pasos.length - 1 && (
+                        <div className="h-0.5 flex-1 mx-3 rounded-full"
+                          style={{ backgroundColor: hecho ? '#22c4a1' : 'rgba(255,255,255,0.15)' }} />
+                      )}
                     </div>
-                    {idx < getWizardSteps().length - 1 && (
-                      <div className={`h-1 flex-1 mx-2 rounded ${
-                        getAdjustedStep() > step.num ? 'bg-white' : 'bg-blue-400'
-                      }`} />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6" style={{ backgroundColor: '#f8fafc' }}>
               {wizardStep === 1 && (
                 <Step1Descripcion
                   descripcion={descripcion}
@@ -657,7 +680,7 @@ const handleConfirmarTodo = async () => {
                   onModoChange={handleModoUbicacionChange}
                   onMapeoChange={(campo, columna) => setMapeo({ ...mapeo, [campo]: columna })}
                   onCampoToggle={(id, key) => {
-                    setCamposDinamicos(prev => prev.map(c => 
+                    setCamposDinamicos(prev => prev.map(c =>
                       c.id === id ? { ...c, [key]: !c[key] } : c
                     ));
                   }}
@@ -673,7 +696,7 @@ const handleConfirmarTodo = async () => {
                 />
               )}
 
-              {((wizardStep === 4 && !needsUbicacion) || (wizardStep === 5 && needsUbicacion)) && (
+              {esPasoResponsables && (
                 <Step5AsignacionResponsables
                   excelData={excelData}
                   responsables={responsables}
@@ -691,7 +714,7 @@ const handleConfirmarTodo = async () => {
                 />
               )}
 
-              {((wizardStep === 5 && !needsUbicacion) || (wizardStep === 6 && needsUbicacion)) && (
+              {esPasoInventariadores && (
                 <Step6AsignacionInventariadores
                   excelData={excelData}
                   inventariadores={inventariadores}
@@ -710,7 +733,7 @@ const handleConfirmarTodo = async () => {
                 />
               )}
 
-              {((wizardStep === 6 && !needsUbicacion) || (wizardStep === 7 && needsUbicacion)) && selectedCarga && (
+              {esPasoConfirmar && selectedCarga && (
                 <Step7Confirmacion
                   carga={selectedCarga}
                   totalRegistros={excelData.length}
@@ -720,108 +743,61 @@ const handleConfirmarTodo = async () => {
               )}
             </div>
 
-            <div className="border-t bg-gray-50 px-6 py-4 flex justify-between rounded-b-xl">
+            <div className="flex items-center justify-between gap-3 px-6 py-4 shrink-0"
+              style={{ borderTop: '1px solid #f1f5f9', backgroundColor: '#fff' }}>
               <div>
                 {wizardStep > 1 && (
-                  <button
-                    onClick={() => setWizardStep(wizardStep - 1)}
-                    disabled={uploading}
-                    className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-medium transition disabled:opacity-50"
-                  >
-                    ← Atrás
-                  </button>
+                  <Boton variante="secundario" onClick={() => setWizardStep(wizardStep - 1)} disabled={uploading}>
+                    <MdArrowBack size={17} /> Atrás
+                  </Boton>
                 )}
               </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowWizard(false)}
-                  disabled={uploading}
-                  className="px-6 py-2.5 bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium transition disabled:opacity-50"
-                >
+              <div className="flex gap-2">
+                <Boton variante="secundario" onClick={() => setShowWizard(false)} disabled={uploading}>
                   Cancelar
-                </button>
+                </Boton>
 
                 {wizardStep === 1 && (
-                  <button
-                    onClick={handleStep1Next}
-                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-lg transition flex items-center gap-2"
-                  >
-                    Continuar <MdArrowForward />
-                  </button>
+                  <Boton onClick={handleStep1Next}>Continuar <MdArrowForward size={17} /></Boton>
                 )}
 
                 {wizardStep === 3 && (
-                  <button
-                    onClick={handleStep3Next}
-                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-lg transition flex items-center gap-2"
-                  >
-                    Continuar <MdArrowForward />
-                  </button>
+                  <Boton onClick={handleStep3Next}>Continuar <MdArrowForward size={17} /></Boton>
                 )}
 
                 {wizardStep === 4 && needsUbicacion && (
-                  <button
-                    onClick={handleStep4Next}
-                    disabled={!ubicacionUnica}
-                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-lg transition disabled:opacity-50 flex items-center gap-2"
-                  >
-                    Continuar <MdArrowForward />
-                  </button>
+                  <Boton onClick={handleStep4Next} disabled={!ubicacionUnica}>Continuar <MdArrowForward size={17} /></Boton>
                 )}
 
-                {((wizardStep === 4 && !needsUbicacion) || (wizardStep === 5 && needsUbicacion)) && (
-                  <button
-                    onClick={handleStep5Next}
-                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-lg transition flex items-center gap-2"
-                  >
-                    Continuar <MdArrowForward />
-                  </button>
+                {esPasoResponsables && (
+                  <Boton onClick={handleStep5Next}>Continuar <MdArrowForward size={17} /></Boton>
                 )}
 
-                {((wizardStep === 5 && !needsUbicacion) || (wizardStep === 6 && needsUbicacion)) && (
-                  <button
-                    onClick={handleStep6Next}
-                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-lg transition flex items-center gap-2"
-                  >
-                    Revisar <MdArrowForward />
-                  </button>
+                {esPasoInventariadores && (
+                  <Boton onClick={handleStep6Next}>Revisar <MdArrowForward size={17} /></Boton>
                 )}
 
-                {((wizardStep === 6 && !needsUbicacion) || (wizardStep === 7 && needsUbicacion)) && (
-                  <button
-                    onClick={handleConfirmarTodo}
-                    disabled={uploading || inventariadorAssignments.length === 0}
-                    className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold shadow-lg transition disabled:opacity-50 flex items-center gap-2 text-lg"
-                  >
+                {esPasoConfirmar && (
+                  <Boton onClick={handleConfirmarTodo} disabled={uploading || inventariadorAssignments.length === 0}>
                     {uploading ? (
                       <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                        Procesando...
+                        <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                        Procesando…
                       </>
                     ) : (
                       <>
-                        <MdCheck size={24} />
-                        Confirmar e Importar
+                        <MdCheck size={18} />
+                        Confirmar e importar
                       </>
                     )}
-                  </button>
+                  </Boton>
                 )}
               </div>
             </div>
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        @keyframes slideIn {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        .animate-slideIn {
-          animation: slideIn 0.3s ease-out;
-        }
-      `}</style>
     </div>
   );
 }

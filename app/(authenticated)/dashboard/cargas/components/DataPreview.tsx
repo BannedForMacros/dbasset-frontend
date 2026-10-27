@@ -1,6 +1,7 @@
 'use client';
 
-import { MdVisibility, MdSelectAll, MdInfo } from 'react-icons/md';
+import { MdSelectAll, MdInfoOutline, MdTableChart } from 'react-icons/md';
+import { Boton } from '@/app/components/rfid/ui';
 
 type ExcelRow = Record<string, string | number | boolean | null | undefined>;
 
@@ -14,11 +15,27 @@ interface DataPreviewProps {
   rowAssignments?: Map<number, { responsable?: string; inventariador?: string }>;
 }
 
-export default function DataPreview({ 
-  data, 
-  selectedRows, 
-  onRowToggle, 
-  onSelectAll, 
+const LIMITE_FILAS = 100;
+
+function Etiqueta({ texto, tono }: { texto: string; tono: 'marca' | 'acento' | 'neutro' }) {
+  const t = {
+    marca:  { bg: 'rgba(30,71,134,0.08)',  color: '#1e4786' },
+    acento: { bg: 'rgba(34,196,161,0.12)', color: '#0f766e' },
+    neutro: { bg: '#f1f5f9',               color: '#94a3b8' },
+  }[tono];
+  return (
+    <span className="inline-block max-w-[11rem] truncate px-2 py-0.5 rounded-md text-[11px] font-semibold align-middle"
+      style={{ backgroundColor: t.bg, color: t.color }} title={texto}>
+      {texto}
+    </span>
+  );
+}
+
+export default function DataPreview({
+  data,
+  selectedRows,
+  onRowToggle,
+  onSelectAll,
   onDeselectAll,
   assignedRows = new Set(),
   rowAssignments = new Map()
@@ -26,123 +43,97 @@ export default function DataPreview({
   if (data.length === 0) return null;
 
   const headers = Object.keys(data[0]);
-  const previewData = data.slice(0, 100);
+  const previewData = data.slice(0, LIMITE_FILAS);
+  const todos = selectedRows.size === data.length;
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-      <div className="bg-gray-50 px-4 py-3 border-b flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <MdVisibility className="text-blue-600" size={20} />
-          <h4 className="font-bold text-gray-800">Vista Previa</h4>
-          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold">
-            {data.length} registros
-          </span>
-          {assignedRows.size > 0 && (
-            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold">
-              {assignedRows.size} asignados
-            </span>
-          )}
+    <div className="tabla-marco">
+      <div className="tabla-barra">
+        <div className="flex flex-wrap items-center gap-2">
+          <MdTableChart size={18} style={{ color: '#1e4786' }} />
+          <h4 className="font-semibold" style={{ color: '#0f172a' }}>Filas del Excel</h4>
+          <Etiqueta texto={`${data.length} filas`} tono="neutro" />
+          {assignedRows.size > 0 && <Etiqueta texto={`${assignedRows.size} asignadas`} tono="acento" />}
+          {selectedRows.size > 0 && <Etiqueta texto={`${selectedRows.size} seleccionadas`} tono="marca" />}
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={onSelectAll}
-            className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 font-medium flex items-center gap-1"
-          >
-            <MdSelectAll size={16} /> Todos
-          </button>
-          <button
-            onClick={onDeselectAll}
-            className="text-xs bg-gray-200 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-300 font-medium"
-          >
-            Limpiar
-          </button>
+          <Boton pequeno variante="secundario" onClick={onSelectAll}><MdSelectAll size={15} /> Seleccionar todas</Boton>
+          <Boton pequeno variante="secundario" onClick={onDeselectAll} disabled={selectedRows.size === 0}>Quitar selección</Boton>
         </div>
       </div>
-      
-      <div className="overflow-x-auto max-h-96">
-        <table className="w-full text-xs">
-          <thead className="bg-gray-50 sticky top-0 border-b">
+
+      <div className="tabla-scroll max-h-96 overflow-y-auto">
+        <table className="tabla tabla-compacta tabla-fija">
+          <thead>
             <tr>
-              <th className="px-3 py-2 text-left font-bold text-gray-600 w-12">
+              <th className="col-check">
                 <input
                   type="checkbox"
-                  checked={selectedRows.size === data.length}
-                  onChange={() => selectedRows.size === data.length ? onDeselectAll() : onSelectAll()}
-                  className="rounded border-gray-300"
+                  checked={todos}
+                  onChange={() => todos ? onDeselectAll() : onSelectAll()}
+                  aria-label="Seleccionar todas las filas"
+                  className="accent-[#1e4786]"
                 />
               </th>
-              <th className="px-3 py-2 text-left font-bold text-gray-600 w-16">#</th>
-              <th className="px-3 py-2 text-left font-bold text-gray-600 w-48">Asignación</th>
-              {headers.map(h => (
-                <th key={h} className="px-3 py-2 text-left font-bold text-gray-600 whitespace-nowrap">
-                  {h}
-                </th>
-              ))}
+              <th className="col-num">#</th>
+              <th>Asignación</th>
+              {headers.map(h => <th key={h}>{h}</th>)}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {previewData.map((row, idx) => {
               const isAssigned = assignedRows.has(idx + 1);
               const assignment = rowAssignments.get(idx + 1);
               const isSelected = selectedRows.has(idx);
-              
+
               return (
-                <tr 
-                  key={idx} 
-                  className={`cursor-pointer transition ${
-                    isSelected ? 'bg-blue-50' : 
-                    isAssigned ? 'bg-green-50' : 
-                    'bg-white hover:bg-gray-50'
-                  }`}
+                <tr
+                  key={idx}
+                  data-clic="true"
+                  data-seleccionada={isSelected}
+                  data-marcada={!isSelected && isAssigned}
                   onClick={() => onRowToggle(idx)}
                 >
-                  <td className="px-3 py-2">
+                  <td className="col-check">
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => onRowToggle(idx)}
-                      className="rounded border-gray-300"
                       onClick={(e) => e.stopPropagation()}
+                      aria-label={`Seleccionar fila ${idx + 1}`}
+                      className="accent-[#1e4786]"
                     />
                   </td>
-                  <td className="px-3 py-2 text-gray-500 font-mono font-bold">{idx + 1}</td>
-                  <td className="px-3 py-2">
-                    {isAssigned && assignment ? (
-                      <div className="space-y-1">
-                        {assignment.responsable && (
-                          <div className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                            R: {assignment.responsable}
-                          </div>
-                        )}
-                        {assignment.inventariador && (
-                          <div className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                            I: {assignment.inventariador}
-                          </div>
-                        )}
+                  <td className="col-num font-mono" style={{ color: '#94a3b8' }}>{idx + 1}</td>
+                  <td>
+                    {assignment?.responsable || assignment?.inventariador ? (
+                      <div className="flex flex-col gap-1 items-start">
+                        {assignment.responsable && <Etiqueta texto={assignment.responsable} tono="marca" />}
+                        {assignment.inventariador && <Etiqueta texto={assignment.inventariador} tono="acento" />}
                       </div>
                     ) : (
-                      <span className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded text-[10px] font-bold">
-                        Sin asignar
-                      </span>
+                      <Etiqueta texto="Sin asignar" tono="neutro" />
                     )}
                   </td>
-                  {headers.map(h => (
-                    <td key={h} className="px-3 py-2 text-gray-700 whitespace-nowrap">
-                      {String(row[h] || '').substring(0, 30)}
-                      {String(row[h] || '').length > 30 ? '...' : ''}
-                    </td>
-                  ))}
+                  {headers.map(h => {
+                    const valor = String(row[h] ?? '');
+                    return (
+                      <td key={h} className="whitespace-nowrap" title={valor.length > 30 ? valor : undefined}>
+                        {valor.length > 30 ? `${valor.substring(0, 30)}…` : valor}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      
-      {data.length > 100 && (
-        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-500 border-t flex items-center gap-2">
-          <MdInfo size={16} />
-          Mostrando primeras 100 filas de {data.length} totales
+
+      {data.length > LIMITE_FILAS && (
+        <div className="tabla-pie justify-start gap-2">
+          <MdInfoOutline size={15} />
+          Se muestran las primeras {LIMITE_FILAS} filas de {data.length}. Las asignaciones por rango aplican a todas.
         </div>
       )}
     </div>

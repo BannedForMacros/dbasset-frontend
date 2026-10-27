@@ -1,7 +1,8 @@
 'use client';
 
-import { useRef } from 'react';
-import { MdCloudUpload, MdInsertDriveFile, MdCheckCircle } from 'react-icons/md';
+import { useRef, useState } from 'react';
+import { MdCloudUpload, MdCheckCircle, MdTableChart } from 'react-icons/md';
+import { PasoEncabezado, AvisoPaso } from '../PasoEncabezado';
 
 interface Step2CargarExcelProps {
   selectedFile: File | null;
@@ -10,18 +11,36 @@ interface Step2CargarExcelProps {
 
 export default function Step2CargarExcel({ selectedFile, onFileSelect }: Step2CargarExcelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [arrastrando, setArrastrando] = useState(false);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="text-center mb-6">
-        <MdCloudUpload className="text-blue-600 mx-auto mb-4" size={64} />
-        <h3 className="text-2xl font-bold text-gray-800 mb-2">Cargar Archivo Excel</h3>
-        <p className="text-gray-600">Seleccione el archivo con los datos del inventario</p>
-      </div>
+    <div className="max-w-2xl mx-auto space-y-5">
+      <PasoEncabezado
+        icono={<MdTableChart size={24} />}
+        titulo="Archivo Excel de activos"
+        descripcion="La primera fila debe tener los nombres de las columnas; cada fila siguiente es un activo."
+      />
 
       <div
-        className="border-4 border-dashed border-gray-300 rounded-lg p-16 text-center hover:border-blue-500 hover:bg-blue-50 transition cursor-pointer group"
+        role="button"
+        tabIndex={0}
+        className="rounded-2xl p-12 text-center cursor-pointer transition-all"
+        style={{
+          backgroundColor: arrastrando ? 'rgba(34,196,161,0.06)' : '#fff',
+          border: `2px dashed ${arrastrando ? '#22c4a1' : '#cbd5e1'}`,
+        }}
         onClick={() => fileInputRef.current?.click()}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && fileInputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
+        onDragLeave={() => setArrastrando(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setArrastrando(false);
+          const archivo = e.dataTransfer.files?.[0];
+          if (archivo) onFileSelect(archivo);
+        }}
+        onMouseEnter={(e) => { if (!arrastrando) e.currentTarget.style.borderColor = '#1e4786'; }}
+        onMouseLeave={(e) => { if (!arrastrando) e.currentTarget.style.borderColor = '#cbd5e1'; }}
       >
         <input
           type="file"
@@ -30,23 +49,21 @@ export default function Step2CargarExcel({ selectedFile, onFileSelect }: Step2Ca
           accept=".xlsx,.xls"
           className="hidden"
         />
-        <MdInsertDriveFile className="text-gray-400 group-hover:text-blue-600 mx-auto mb-4" size={80} />
-        <p className="text-xl font-bold text-gray-700 group-hover:text-blue-600 mb-2">
-          Click para seleccionar archivo
+        <div className="mx-auto mb-4 w-14 h-14 rounded-2xl flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(30,71,134,0.08)', color: '#1e4786' }}>
+          <MdCloudUpload size={30} />
+        </div>
+        <p className="font-semibold" style={{ color: '#0f172a' }}>
+          Arrastre el archivo aquí o <span style={{ color: '#1e4786', textDecoration: 'underline' }}>búsquelo en su equipo</span>
         </p>
-        <p className="text-sm text-gray-500">Formatos: .xlsx, .xls</p>
+        <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>Formatos admitidos: .xlsx y .xls</p>
       </div>
 
       {selectedFile && (
-        <div className="bg-green-50 p-4 rounded-lg border-2 border-green-200 flex items-center gap-3">
-          <MdCheckCircle className="text-green-600" size={24} />
-          <div className="flex-1">
-            <p className="font-bold text-green-800">{selectedFile.name}</p>
-            <p className="text-xs text-green-600">
-              {(selectedFile.size / 1024).toFixed(2)} KB
-            </p>
-          </div>
-        </div>
+        <AvisoPaso tono="ok" icono={<MdCheckCircle size={20} />}>
+          <p className="font-semibold" style={{ color: '#0f172a' }}>{selectedFile.name}</p>
+          <p className="text-xs" style={{ color: '#64748b' }}>{(selectedFile.size / 1024).toFixed(1)} KB</p>
+        </AvisoPaso>
       )}
     </div>
   );
